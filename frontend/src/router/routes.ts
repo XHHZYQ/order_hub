@@ -1,0 +1,99 @@
+// 路由表（与菜单对应）
+// 只声明本批次（批次 1：M10 系统管理 + M1 平台与店铺）已实现的页面
+import type { RouteRecordRaw } from 'vue-router'
+
+/** 一级菜单分组（用于侧边栏分组渲染，顺序即菜单顺序） */
+export interface MenuGroup {
+  key: string
+  title: string
+  icon: string
+}
+
+export const MENU_GROUPS: MenuGroup[] = [
+  { key: 'dashboard', title: '数据看板', icon: 'DataLine' },
+  { key: 'platform', title: '平台与店铺', icon: 'Shop' },
+  { key: 'system', title: '系统管理', icon: 'Setting' },
+]
+
+/** 无需登录的路由 */
+export const constantRoutes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/login/index.vue'),
+    meta: { title: '登录', hidden: true },
+  },
+]
+
+/** 需要登录、参与菜单渲染的路由（作为 DefaultLayout 的子路由） */
+export const layoutChildren: RouteRecordRaw[] = [
+  {
+    path: '/dashboard/overview',
+    name: 'DashboardOverview',
+    component: () => import('@/views/dashboard/overview.vue'),
+    meta: { title: '经营总览', icon: 'Odometer', group: 'dashboard' },
+  },
+  // 平台与店铺（M1）
+  {
+    path: '/platform/list',
+    name: 'PlatformList',
+    component: () => import('@/views/platform/list.vue'),
+    meta: { title: '平台管理', icon: 'Grid', group: 'platform', perm: 'platform:list' },
+  },
+  {
+    path: '/platform/shop',
+    name: 'PlatformShop',
+    component: () => import('@/views/platform/shop.vue'),
+    meta: { title: '店铺管理', icon: 'Shop', group: 'platform', perm: 'shop:list' },
+  },
+  {
+    path: '/platform/sync-task',
+    name: 'PlatformSyncTask',
+    component: () => import('@/views/platform/sync-task.vue'),
+    meta: { title: '同步任务', icon: 'Refresh', group: 'platform', perm: 'sync:task_list' },
+  },
+  {
+    path: '/platform/sync-log',
+    name: 'PlatformSyncLog',
+    component: () => import('@/views/platform/sync-log.vue'),
+    meta: { title: '同步日志', icon: 'Document', group: 'platform', perm: 'sync:log_list' },
+  },
+  // 系统管理（M10）
+  {
+    path: '/system/user',
+    name: 'SystemUser',
+    component: () => import('@/views/system/user.vue'),
+    meta: { title: '用户管理', icon: 'User', group: 'system', perm: 'user:list' },
+  },
+  {
+    path: '/system/role',
+    name: 'SystemRole',
+    component: () => import('@/views/system/role.vue'),
+    meta: { title: '角色管理', icon: 'UserFilled', group: 'system', perm: 'role:list' },
+  },
+  {
+    path: '/system/log',
+    name: 'SystemLog',
+    component: () => import('@/views/system/log.vue'),
+    meta: { title: '操作日志', icon: 'Tickets', group: 'system', perm: 'log:list' },
+  },
+]
+
+/** 需要通过 DefaultLayout 访问的主路由 */
+export const layoutRoute: RouteRecordRaw = {
+  path: '/',
+  name: 'Layout',
+  component: () => import('@/layouts/DefaultLayout.vue'),
+  redirect: '/dashboard/overview',
+  children: layoutChildren,
+}
+
+/** 通配路由：未匹配时回到首页 */
+export const notFoundRoute: RouteRecordRaw = {
+  path: '/:pathMatch(.*)*',
+  redirect: '/dashboard/overview',
+  meta: { hidden: true },
+}
+
+export const routes: RouteRecordRaw[] = [...constantRoutes, layoutRoute, notFoundRoute]
+export default routes

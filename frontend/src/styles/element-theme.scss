@@ -1,0 +1,156 @@
+// ============================================================
+// Element Plus 主题覆盖
+// 设计 token 依据 docs/style.md：主色 #6366f1 玻璃质感科技风
+// ============================================================
+
+:root {
+  // 主色及其派生色阶
+  --el-color-primary: #6366f1;
+  --el-color-primary-light-3: #9294f5;
+  --el-color-primary-light-5: #b1b2f8;
+  --el-color-primary-light-7: #d0d1fb;
+  --el-color-primary-light-8: #e0e0fc;
+  --el-color-primary-light-9: #efeffe;
+  --el-color-primary-dark-2: #4f52c1;
+
+  // 成功
+  --el-color-success: #10b981;
+  --el-color-success-light-3: #58cea7;
+  --el-color-success-light-5: #88dcc0;
+  --el-color-success-light-7: #b7ebd6;
+  --el-color-success-light-8: #cfefe2;
+  --el-color-success-light-9: #e7f7ef;
+  --el-color-success-dark-2: #0d9467;
+
+  // 警告
+  --el-color-warning: #f59e0b;
+  --el-color-warning-light-3: #f8bb54;
+  --el-color-warning-light-5: #face85;
+  --el-color-warning-light-7: #fce2b6;
+  --el-color-warning-light-8: #fdecce;
+  --el-color-warning-light-9: #fef5e7;
+  --el-color-warning-dark-2: #c47e09;
+
+  // 危险 / 失败
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #f47c7c;
+  --el-color-danger-light-5: #f7a2a2;
+  --el-color-danger-light-7: #fac7c7;
+  --el-color-danger-light-8: #fcdada;
+  --el-color-danger-light-9: #fdecec;
+  --el-color-danger-dark-2: #bf3636;
+  --el-color-error: #ef4444;
+  --el-color-error-light-3: #f47c7c;
+  --el-color-error-light-5: #f7a2a2;
+  --el-color-error-light-7: #fac7c7;
+  --el-color-error-light-8: #fcdada;
+  --el-color-error-light-9: #fdecec;
+  --el-color-error-dark-2: #bf3636;
+
+  // 信息
+  --el-color-info: #3b82f6;
+  --el-color-info-light-3: #76a8f8;
+  --el-color-info-light-5: #9dc1fa;
+  --el-color-info-light-7: #c4d9fc;
+  --el-color-info-light-8: #d8e6fd;
+  --el-color-info-light-9: #ebf2fe;
+  --el-color-info-dark-2: #2f68c5;
+
+  // 文本
+  --el-text-color-primary: #1e293b;
+  --el-text-color-regular: rgba(30, 41, 59, 0.85);
+  --el-text-color-secondary: rgba(30, 41, 59, 0.6);
+  --el-text-color-placeholder: rgba(30, 41, 59, 0.4);
+  --el-text-color-disabled: rgba(30, 41, 59, 0.25);
+  --el-text-color-primary-light: rgba(30, 41, 59, 0.6);
+
+  // 背景
+  --el-bg-color: rgba(255, 255, 255, 0.6);
+  --el-bg-color-page: #f8fafc;
+  --el-bg-color-overlay: rgba(255, 255, 255, 0.8);
+  --el-fill-color-blank: rgba(255, 255, 255, 0.6);
+  --el-fill-color-light: rgba(226, 232, 240, 0.35);
+  --el-fill-color-lighter: rgba(226, 232, 240, 0.25);
+  --el-mask-color: rgba(30, 41, 59, 0.3);
+
+  // 边框
+  --el-border-color: rgba(226, 232, 240, 0.7);
+  --el-border-color-light: rgba(226, 232, 240, 0.5);
+  --el-border-color-lighter: rgba(226, 232, 240, 0.4);
+  --el-border-color-extra-light: rgba(226, 232, 240, 0.25);
+  --el-border-color-hover: var(--color-primary-hover);
+  --el-border-color-darker: rgba(203, 213, 225, 0.8);
+
+  // 圆角（SM 10 / XS 6）
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 24px;
+
+  // 阴影
+  --el-box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  --el-box-shadow-light: 0 8px 24px 0 rgba(31, 38, 135, 0.08);
+  --el-box-shadow-lighter: 0 4px 16px 0 rgba(31, 38, 135, 0.06);
+  --el-box-shadow-dark: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+
+  // 禁用透明度
+  --el-disabled-bg-color: rgba(226, 232, 240, 0.4);
+  --el-disabled-text-color: rgba(30, 41, 59, 0.25);
+  --el-disabled-border-color: rgba(226, 232, 240, 0.5);
+}
+
+// 表格：玻璃底、浅色表头
+.el-table {
+  --el-table-border-color: var(--glass-border-secondary);
+  --el-table-header-bg-color: rgba(226, 232, 240, 0.4);
+  --el-table-header-text-color: var(--color-text-base);
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-row-hover-bg-color: rgba(99, 102, 241, 0.06);
+  background-color: transparent;
+}
+
+// 卡片 / 弹窗：玻璃拟态
+.el-card,
+.el-dialog,
+.el-drawer {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-base);
+}
+
+.el-dialog__header {
+  margin-right: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--glass-border-secondary);
+}
+
+.el-dialog__footer {
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border-secondary);
+}
+
+// 下拉 / 弹层
+.el-popper.is-light,
+.el-select-dropdown,
+.el-dropdown__popper {
+  background: var(--glass-bg-hover);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border) !important;
+}
+
+.el-message {
+  backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--radius-sm);
+}
+
+.el-tag {
+  border-radius: var(--radius-xs);
+}
+
+.el-button {
+  border-radius: var(--radius-sm);
+}
