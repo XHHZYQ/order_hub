@@ -17,8 +17,8 @@ interface StatusOption {
 
 interface Props {
   value: string | number | null | undefined
-  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 */
-  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'custom'
+  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 */
+  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'custom'
   /** 自定义映射（scene=custom 时使用） */
   options?: Record<string | number, StatusOption>
   effect?: 'light' | 'dark' | 'plain'
@@ -55,6 +55,17 @@ const SCENE_MAP: Record<string, Record<string | number, StatusOption>> = {
     ORDER: { label: '订单', type: 'primary' },
     INVENTORY: { label: '库存', type: 'success' },
     AFTER_SALE: { label: '售后', type: 'warning' },
+  },
+  // 订单状态配色（见《项目结构》7.4；键为后端状态码）
+  order: {
+    PENDING_PAY: { label: '待付款', type: 'info' },
+    PENDING_AUDIT: { label: '待审核', type: 'warning' },
+    PENDING_SHIP: { label: '待发货', type: 'primary' },
+    PART_SHIPPED: { label: '部分发货', type: 'warning' },
+    SHIPPED: { label: '已发货', type: 'primary' },
+    FINISHED: { label: '已完成', type: 'success' },
+    CLOSED: { label: '已关闭', type: 'info' },
+    AFTER_SALE: { label: '售后中', type: 'danger' },
   },
 }
 

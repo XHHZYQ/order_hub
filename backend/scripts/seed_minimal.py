@@ -4,20 +4,30 @@
     uv run python scripts/seed_minimal.py
 
 覆盖表：platform / shop / role / permission / role_permission / user / user_role /
-role_shop / sync_task / sync_log / operation_log
+role_shop / sync_task / sync_log / operation_log /
+orders / order_item / order_ext / order_log / order_change
 """
 
 import pathlib
 import random
 import sys
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from sqlmodel import Session, delete  # noqa: E402
 
+from app.core.constants import ORDER_STATUS_MAP  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
+from app.models.order import (  # noqa: E402
+    Order,
+    OrderChange,
+    OrderExt,
+    OrderItem,
+    OrderLog,
+)
 from app.models.platform import Platform, Shop, SyncLog, SyncTask  # noqa: E402
 from app.models.system import (  # noqa: E402
     OperationLog,
@@ -28,6 +38,7 @@ from app.models.system import (  # noqa: E402
     User,
     UserRole,
 )
+from app.simulator import seed  # noqa: E402
 from app.utils.datetime_util import now_utc  # noqa: E402
 
 random.seed(20260101)
@@ -148,6 +159,7 @@ BUTTONS = [
     ("order:price", "订单改价", "order:list", 2),
     ("order:address", "修改地址", "order:list", 3),
     ("order:export", "导出订单", "order:list", 4),
+    ("order:sync", "同步/补单/异常处理", "order:list", 5),
     ("shipment:batch_ship", "批量发货", "shipment:ship", 1),
     ("inventory:edit", "库存调整", "inventory:list", 1),
     ("finance:import", "账单导入", "finance:bill", 1),
@@ -203,6 +215,11 @@ def with_menus(page_codes: list[str]) -> set[str]:
 
 def clear_tables(session: Session) -> None:
     for model in (
+        OrderChange,
+        OrderLog,
+        OrderExt,
+        OrderItem,
+        Order,
         OperationLog,
         SyncLog,
         SyncTask,
@@ -340,6 +357,7 @@ def role_permission_codes(page_codes: list[str]) -> dict[str, list[str]]:
                 "order:price",
                 "order:address",
                 "order:export",
+                "order:sync",
                 "shipment:batch_ship",
                 "inventory:edit",
                 "sync:trigger",
@@ -510,6 +528,261 @@ def seed_operation_logs(session: Session, users: dict[str, User]) -> None:
     session.flush()
 
 
+ORDER_SEED = 20260202
+ANOMALY_REASONS = ["收货地址缺失", "金额校验不一致：商品金额与明细合计不符"]
+
+
+def _platform_order_no(rng: random.Random, platform_code: str, dt: datetime) -> str:
+    """生成各平台形态的原始订单号（贴近真实）。"""
+    if platform_code == "TAOBAO":
+        return str(rng.randint(10**14, 10**15 - 1))
+    if platform_code == "JD":
+        return str(rng.randint(10**9, 10**10 - 1))
+    if platform_code == "PDD":
+        return f"{dt:%y%m%d}-{rng.randint(10**11, 10**12 - 1)}"
+    if platform_code == "DOUYIN":
+        return str(rng.randint(10**17, 10**18 - 1))
+    return f"SN{rng.randint(10**11, 10**12 - 1)}"
+
+
+def _money(value: float) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+def seed_orders(session: Session, shops: dict) -> int:
+    """生成贴近真实的订单数据（约 300~500 单，覆盖全部平台与店铺，跨度约 60 天）。"""
+    rng = random.Random(ORDER_SEED)
+    now = now_utc()
+    used_pnos: set[str] = set()
+    seq = 0
+    total = 0
+
+    for shop in shops.values():
+        platform_code = shop.platform_code
+        status_map = ORDER_STATUS_MAP.get(platform_code, {})
+        if not status_map:
+            continue
+        inverse = {v: k for k, v in status_map.items()}
+        field_map = seed.ORDER_FIELD_MAP[platform_code]
+        ext_fields = seed.EXT_FIELD_MAP[platform_code]
+        status_codes = list(seed.STATUS_WEIGHTS)
+        status_weights = [seed.STATUS_WEIGHTS[k] for k in status_codes]
+
+        for _ in range(rng.randint(30, 45)):
+            seq += 1
+            order_time = now - timedelta(
+                days=rng.randint(0, 59),
+                hours=rng.randint(0, 23),
+                minutes=rng.randint(0, 59),
+                seconds=rng.randint(0, 59),
+            )
+            unified = rng.choices(status_codes, weights=status_weights, k=1)[0]
+            raw_status = inverse.get(unified, "")
+            account, nick = seed.random_buyer(rng, platform_code)
+            recv = seed.random_receiver(rng)
+            order_no = f"OH{order_time:%Y%m%d}{seq:05d}"
+
+            while True:
+                pno = _platform_order_no(rng, platform_code, order_time)
+                if pno not in used_pnos:
+                    used_pnos.add(pno)
+                    break
+
+            # 明细 1~3 条
+            items = []
+            goods = Decimal("0")
+            disc = Decimal("0")
+            for _ in range(rng.randint(1, 3)):
+                name, _spu, spec, price = seed.random_product(rng)
+                qty = rng.randint(1, 3)
+                line_total = _money(price * qty)
+                line_disc = _money(float(line_total) * rng.choice([0, 0, 0, 0.05, 0.1]))
+                items.append(
+                    {
+                        "platform_sku_id": str(rng.randint(10**8, 10**9 - 1)),
+                        "platform_sku_name": f"{name} {spec}",
+                        "outer_sku_code": f"OSK{rng.randint(100000, 999999)}",
+                        "product_name": name,
+                        "spec_desc": spec,
+                        "price": _money(price),
+                        "quantity": qty,
+                        "total_amount": line_total,
+                        "discount_amount": line_disc,
+                        "pay_amount": (line_total - line_disc).quantize(Decimal("0.01")),
+                    }
+                )
+                goods += line_total
+                disc += line_disc
+            freight = _money(rng.choice([0, 0, 0, 8, 12, 15]))
+            pay_amount = (goods - disc + freight).quantize(Decimal("0.01"))
+
+            # 异常单
+            is_abnormal = 1 if rng.random() < 0.08 else 0
+            abnormal_reason = rng.choice(ANOMALY_REASONS) if is_abnormal else None
+            address_missing = abnormal_reason == "收货地址缺失"
+
+            # 付款 / 发货 / 完成 / 关闭时间
+            paid_at = None
+            if unified != "PENDING_PAY":
+                paid_at = order_time + timedelta(minutes=rng.randint(1, 180))
+            shipped_at = None
+            if unified in ("PART_SHIPPED", "SHIPPED", "FINISHED", "AFTER_SALE"):
+                shipped_at = (paid_at or order_time) + timedelta(hours=rng.randint(6, 72))
+            finished_at = (
+                shipped_at + timedelta(days=rng.randint(1, 7))
+                if unified == "FINISHED" and shipped_at
+                else None
+            )
+            closed_at = order_time + timedelta(hours=rng.randint(1, 48)) if unified == "CLOSED" else None
+
+            order = Order(
+                order_no=order_no,
+                platform_code=platform_code,
+                shop_id=shop.id,
+                platform_order_no=pno,
+                buyer_account=account,
+                buyer_nick=nick,
+                receiver_name=None if address_missing else recv["name"],
+                receiver_phone=None if address_missing else recv["phone"],
+                receiver_province=None if address_missing else recv["province"],
+                receiver_city=None if address_missing else recv["city"],
+                receiver_district=None if address_missing else recv["district"],
+                receiver_address=None if address_missing else recv["detail"],
+                goods_amount=goods,
+                discount_amount=disc,
+                freight_amount=freight,
+                pay_amount=pay_amount,
+                status=unified,
+                platform_status=raw_status,
+                source="平台",
+                is_abnormal=is_abnormal,
+                abnormal_reason=abnormal_reason,
+                merchant_remark=rng.choice([None, None, None, "客户要求尽快发货", "已备注不用发票"]),
+                buyer_remark=rng.choice([None, None, "尽快发货，谢谢！", "需要发票", "不要放快递柜"]),
+                tags=rng.choice([None, None, None, "加急", "大客户"]),
+                order_time=order_time,
+                paid_at=paid_at,
+                shipped_at=shipped_at,
+                finished_at=finished_at,
+                closed_at=closed_at,
+                sync_time=order_time + timedelta(minutes=rng.randint(1, 30)),
+                created_at=order_time,
+                updated_at=order_time,
+            )
+            session.add(order)
+            session.flush()
+
+            for item in items:
+                session.add(
+                    OrderItem(
+                        order_id=order.id,
+                        order_no=order_no,
+                        platform_sku_id=item["platform_sku_id"],
+                        platform_sku_name=item["platform_sku_name"],
+                        outer_sku_code=item["outer_sku_code"],
+                        sku_code=item["outer_sku_code"],
+                        product_name=item["product_name"],
+                        spec_desc=item["spec_desc"],
+                        price=item["price"],
+                        quantity=item["quantity"],
+                        total_amount=item["total_amount"],
+                        discount_amount=item["discount_amount"],
+                        pay_amount=item["pay_amount"],
+                        shipped_quantity=item["quantity"] if shipped_at else 0,
+                        refund_quantity=0,
+                        is_matched=1 if rng.random() < 0.6 else 0,
+                        created_at=order_time,
+                    )
+                )
+
+            # 平台扩展字段（约 60% 的订单）
+            if rng.random() < 0.6:
+                for raw_key, cn_name in ext_fields.items():
+                    if raw_key == field_map["platform_status"]:
+                        value = raw_status
+                    elif raw_key == "seller_nick":
+                        value = shop.shop_name
+                    elif raw_key in ("venderId", "mall_id", "shop_id"):
+                        value = str(shop.id)
+                    elif raw_key in seed.EXT_VALUE_POOL:
+                        value = rng.choice(seed.EXT_VALUE_POOL[raw_key])
+                    elif raw_key in ("buyer_message", "buyerMessage", "buyer_remark"):
+                        value = order.buyer_remark
+                    else:
+                        value = None
+                    if value:
+                        session.add(
+                            OrderExt(
+                                order_id=order.id,
+                                ext_key=raw_key,
+                                ext_name=cn_name,
+                                ext_value=str(value),
+                                created_at=order_time,
+                            )
+                        )
+
+            # 操作日志：汇聚（全部）+ 异常（异常单）+ 数据变更（约 30%）
+            session.add(
+                OrderLog(
+                    order_id=order.id,
+                    order_no=order_no,
+                    action="同步",
+                    to_status=unified,
+                    content="首次汇聚订单",
+                    operator="系统",
+                    source="系统",
+                    created_at=order_time,
+                )
+            )
+            if is_abnormal:
+                session.add(
+                    OrderLog(
+                        order_id=order.id,
+                        order_no=order_no,
+                        action="同步异常",
+                        to_status=unified,
+                        content=f"同步校验失败：{abnormal_reason}",
+                        operator="系统",
+                        source="系统",
+                        created_at=order_time + timedelta(minutes=rng.randint(1, 30)),
+                    )
+                )
+            if rng.random() < 0.3:
+                change_time = order_time + timedelta(hours=rng.randint(1, 24))
+                old_pay = pay_amount
+                new_pay = (pay_amount + _money(rng.choice([5, -5, 10]))).quantize(Decimal("0.01"))
+                session.add(
+                    OrderLog(
+                        order_id=order.id,
+                        order_no=order_no,
+                        action="数据变更",
+                        to_status=unified,
+                        content="平台数据更新：实付金额",
+                        operator="系统",
+                        source="系统",
+                        created_at=change_time,
+                    )
+                )
+                session.add(
+                    OrderChange(
+                        order_id=order.id,
+                        order_no=order_no,
+                        field_name="pay_amount",
+                        field_label="实付金额",
+                        old_value=f"{old_pay:.2f}",
+                        new_value=f"{new_pay:.2f}",
+                        operator="系统",
+                        source="系统",
+                        created_at=change_time,
+                    )
+                )
+
+            total += 1
+
+    session.flush()
+    return total
+
+
 def main() -> None:
     with Session(engine) as session:
         print("[seed] 清空本批次相关表 ...")
@@ -525,11 +798,13 @@ def main() -> None:
         tasks = seed_sync_tasks(session, shops)
         seed_sync_logs(session, tasks)
         seed_operation_logs(session, users)
+        orders_count = seed_orders(session, shops)
 
         session.commit()
 
         print(f"[seed] 平台 {len(platforms)} / 店铺 {len(shops)} / 角色 {len(roles)} / 权限 {len(all_codes)}")
-        print(f"[seed] 用户 {len(users)} / 同步任务 {len(tasks)} / 同步日志与操作日志已生成")
+        print(f"[seed] 用户 {len(users)} / 同步任务 {len(tasks)} / 订单 {orders_count}")
+        print("[seed] 同步日志与操作日志已生成")
         print("[seed] 默认密码：123456")
 
 

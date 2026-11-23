@@ -11,6 +11,7 @@ export interface MenuGroup {
 
 export const MENU_GROUPS: MenuGroup[] = [
   { key: 'dashboard', title: '数据看板', icon: 'DataLine' },
+  { key: 'order', title: '订单中心', icon: 'Tickets' },
   { key: 'platform', title: '平台与店铺', icon: 'Shop' },
   { key: 'system', title: '系统管理', icon: 'Setting' },
 ]
@@ -32,6 +33,19 @@ export const layoutChildren: RouteRecordRaw[] = [
     name: 'DashboardOverview',
     component: () => import('@/views/dashboard/overview.vue'),
     meta: { title: '经营总览', icon: 'Odometer', group: 'dashboard' },
+  },
+  // 订单中心（M2）
+  {
+    path: '/order/list',
+    name: 'OrderList',
+    component: () => import('@/views/order/list.vue'),
+    meta: { title: '订单列表', icon: 'Tickets', group: 'order', perm: 'order:list' },
+  },
+  {
+    path: '/order/detail/:id',
+    name: 'OrderDetail',
+    component: () => import('@/views/order/detail.vue'),
+    meta: { title: '订单详情', icon: 'Document', group: 'order', perm: 'order:detail', hidden: true },
   },
   // 平台与店铺（M1）
   {

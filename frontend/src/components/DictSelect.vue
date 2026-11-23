@@ -31,6 +31,8 @@ import {
   TRIGGER_TYPE_DICT,
   ENABLE_STATUS_DICT,
   AUTH_STATUS_DICT,
+  ORDER_STATUS_DICT,
+  ORDER_SOURCE_DICT,
 } from '@/store/dict'
 import type { Option } from '@/types'
 
@@ -42,6 +44,8 @@ type DictType =
   | 'syncType'
   | 'syncStatus'
   | 'trigger'
+  | 'orderStatus'
+  | 'orderSource'
 
 interface Props {
   modelValue?: string | number | (string | number)[] | null
@@ -88,6 +92,10 @@ const options = computed<Option[]>(() => {
       return SYNC_STATUS_DICT
     case 'trigger':
       return TRIGGER_TYPE_DICT
+    case 'orderStatus':
+      return ORDER_STATUS_DICT
+    case 'orderSource':
+      return ORDER_SOURCE_DICT
     default:
       return []
   }

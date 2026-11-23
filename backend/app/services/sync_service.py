@@ -3,14 +3,16 @@
 import random
 import string
 import time
+from datetime import timedelta
 
 from sqlmodel import Session, func, select
 
-from app.core.exceptions import duplicate, not_found, param_error, status_not_allowed
+from app.core.exceptions import duplicate, forbidden, not_found, param_error, status_not_allowed
 from app.models.platform import Platform, Shop, SyncLog, SyncTask
 from app.models.system import User
+from app.services import order_service
 from app.services.user_service import record_operation
-from app.utils.datetime_util import now_utc, parse_datetime
+from app.utils.datetime_util import format_datetime, now_utc, parse_datetime
 from app.utils.pagination import normalize
 
 
@@ -336,19 +338,41 @@ def set_sync_task_status(session: Session, task_id: int, status: int, operator: 
 
 
 # --------------------------------------------------------------------------- #
-# 同步执行（批次1 仅跑通链路）
+# 同步执行
 # --------------------------------------------------------------------------- #
 def execute_task(session: Session, task: SyncTask, trigger_type: str = "手动") -> SyncLog:
     """执行一次同步任务，写入一条同步日志。
 
-    批次1：真实拉数（模拟平台适配器）尚未实现，仅跑通链路，记录成功、counts=0。
-    TODO 批次2：改为调用平台适配器 fetch_orders/fetch_inventory/fetch_after_sales 真实拉取并幂等落库。
+    ORDER 类型走真实汇聚（order_service.run_order_sync）；INVENTORY / AFTER_SALE
+    暂保持占位（成功、计数 0），将在后续批次实现，不报错。
     """
     if task.status != 1:
         raise status_not_allowed("同步任务已停用，无法执行")
     started = time.perf_counter()
     end_time = now_utc()
-    start_time = task.last_sync_time or task.start_time or end_time
+    start_time = task.last_sync_time or task.start_time or (end_time - timedelta(days=1))
+
+    success_count = 0
+    fail_count = 0
+    status = "成功"
+    fail_reason: str | None = None
+
+    if task.sync_type == "ORDER":
+        shop = session.get(Shop, task.shop_id)
+        shops = [shop] if shop and shop.is_deleted == 0 else []
+        result = order_service.run_order_sync(session, shops=shops, start=start_time, end=end_time)
+        success_count = result["success_count"]
+        fail_count = result["fail_count"]
+        if fail_count == 0:
+            status = "成功"
+        elif success_count > 0:
+            status = "部分失败"
+        else:
+            status = "失败"
+        if fail_count:
+            fail_reason = f"{fail_count} 条订单同步异常（可重试或人工处理）"
+    else:
+        fail_reason = "该类型将在后续批次实现"
 
     log = SyncLog(
         task_id=task.id,
@@ -356,11 +380,11 @@ def execute_task(session: Session, task: SyncTask, trigger_type: str = "手动")
         sync_type=task.sync_type,
         start_time=start_time,
         end_time=end_time,
-        status="成功",
-        success_count=0,
-        fail_count=0,
+        status=status,
+        success_count=success_count,
+        fail_count=fail_count,
         cost_ms=int((time.perf_counter() - started) * 1000),
-        fail_reason=None,
+        fail_reason=fail_reason,
         trigger_type=trigger_type,
     )
     task.last_sync_time = end_time
@@ -369,6 +393,97 @@ def execute_task(session: Session, task: SyncTask, trigger_type: str = "手动")
     session.commit()
     session.refresh(log)
     return log
+
+
+def manual_order_sync(
+    session: Session,
+    *,
+    shop_id: int | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    operator: User | None = None,
+    trigger_type: str = "手动",
+    allowed_shop_ids: list[int] | None = None,
+) -> dict:
+    """手动同步 / 手动补单。
+
+    shop_id 为空时同步全部"启用且已授权"的店铺（受数据权限约束）；
+    时间缺省为：end=当前时间，start=end-1 天。
+    """
+    end = parse_datetime(end_time) or now_utc()
+    start = parse_datetime(start_time) or (end - timedelta(days=1))
+    if start > end:
+        raise param_error("开始时间不能晚于结束时间")
+
+    if shop_id:
+        shop = session.get(Shop, shop_id)
+        if not shop or shop.is_deleted == 1:
+            raise not_found("店铺不存在")
+        if allowed_shop_ids is not None and shop.id not in allowed_shop_ids:
+            raise forbidden("无权操作该店铺")
+        shops = [shop]
+    else:
+        conditions = [Shop.is_deleted == 0, Shop.status == 1, Shop.auth_status == 1]
+        if allowed_shop_ids is not None:
+            conditions.append(Shop.id.in_(allowed_shop_ids or [-1]))
+        shops = session.exec(select(Shop).where(*conditions).order_by(Shop.id)).all()
+        if not shops:
+            raise param_error("没有可同步的店铺")
+
+    result = order_service.run_order_sync(session, shops=list(shops), start=start, end=end)
+
+    if result["fail_count"] == 0:
+        status = "成功"
+    elif result["success_count"] > 0:
+        status = "部分失败"
+    else:
+        status = "失败"
+    fail_reason = f"{result['fail_count']} 条订单同步异常（可重试或人工处理）" if result["fail_count"] else None
+
+    log = SyncLog(
+        task_id=None,
+        shop_id=shop_id,
+        sync_type="ORDER",
+        start_time=start,
+        end_time=end,
+        status=status,
+        success_count=result["success_count"],
+        fail_count=result["fail_count"],
+        cost_ms=result["cost_ms"],
+        fail_reason=fail_reason,
+        trigger_type=trigger_type,
+    )
+    session.add(log)
+
+    # 更新相关店铺订单同步任务的最近同步时间
+    shop_ids = [s.id for s in shops]
+    tasks = session.exec(
+        select(SyncTask).where(SyncTask.sync_type == "ORDER", SyncTask.shop_id.in_(shop_ids or [-1]))
+    ).all()
+    for t in tasks:
+        t.last_sync_time = end
+        session.add(t)
+
+    session.commit()
+    session.refresh(log)
+    record_operation(
+        session,
+        operator,
+        "ORDER",
+        "手动同步" if trigger_type == "手动" else "手动补单",
+        "订单",
+        None,
+        f"{trigger_type}订单同步，成功 {result['success_count']} 条，异常 {result['fail_count']} 条",
+    )
+    session.commit()
+    return {
+        "total": result["success_count"] + result["fail_count"],
+        "success_count": result["success_count"],
+        "fail_count": result["fail_count"],
+        "log_id": log.id,
+        "start_time": format_datetime(start),
+        "end_time": format_datetime(end),
+    }
 
 
 def trigger_sync_task(session: Session, task_id: int, operator: User | None = None) -> dict:

@@ -34,6 +34,24 @@ export const AUTH_STATUS_DICT: Option[] = [
   { label: '未授权', value: 0 },
 ]
 
+// 订单统一状态（8 态，与《数据库设计》6.2 一致；后端以状态码存储，前端映射中文展示）
+export const ORDER_STATUS_DICT: Option[] = [
+  { label: '待付款', value: 'PENDING_PAY' },
+  { label: '待审核', value: 'PENDING_AUDIT' },
+  { label: '待发货', value: 'PENDING_SHIP' },
+  { label: '部分发货', value: 'PART_SHIPPED' },
+  { label: '已发货', value: 'SHIPPED' },
+  { label: '已完成', value: 'FINISHED' },
+  { label: '已关闭', value: 'CLOSED' },
+  { label: '售后中', value: 'AFTER_SALE' },
+]
+
+// 订单来源
+export const ORDER_SOURCE_DICT: Option[] = [
+  { label: '平台', value: '平台' },
+  { label: '手工', value: '手工' },
+]
+
 interface DictState {
   platformOptions: Option[]
   shopOptions: Option[]

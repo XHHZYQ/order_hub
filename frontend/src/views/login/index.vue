@@ -37,7 +37,7 @@
         </el-form-item>
       </el-form>
 
-      <p class="login-card__tip">默认管理员：admin / admin123</p>
+      <p class="login-card__tip">默认管理员：admin / 123456</p>
     </div>
   </div>
 </template>

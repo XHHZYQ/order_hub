@@ -27,9 +27,20 @@ EXTRA_DDL: list[str] = [
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_user_role ON user_role (user_id, role_id)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_role_permission ON role_permission (role_id, permission_id)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_role_shop ON role_shop (role_id, shop_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_orders_order_no ON orders (order_no)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_orders_platform_shop_no ON orders (platform_code, shop_id, platform_order_no)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_order_ext_order_key ON order_ext (order_id, ext_key)',
     # 5.2 常用索引
     'CREATE INDEX IF NOT EXISTS idx_sync_log_task_created ON sync_log (task_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_operation_log_created ON operation_log (created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_shop_status_order_time ON orders (shop_id, status, order_time)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_platform_order_no ON orders (platform_order_no)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_buyer_account ON orders (buyer_account)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_is_abnormal ON orders (is_abnormal)',
+    'CREATE INDEX IF NOT EXISTS idx_order_item_order_id ON order_item (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_order_item_sku_id ON order_item (sku_id)',
+    'CREATE INDEX IF NOT EXISTS idx_order_log_order_id ON order_log (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_order_change_order_id ON order_change (order_id)',
 ]
 
 

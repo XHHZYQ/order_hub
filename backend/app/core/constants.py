@@ -50,6 +50,78 @@ AUTH_STATUS = {"AUTHORIZED": 1, "UNAUTHORIZED": 0}
 # 权限类型
 PERM_TYPES = {"MENU": "菜单", "BUTTON": "按钮"}
 
+# 订单统一状态（见《数据库设计》6.3 / 7.2）
+ORDER_STATUS: dict[str, str] = {
+    "PENDING_PAY": "待付款",
+    "PENDING_AUDIT": "待审核",
+    "PENDING_SHIP": "待发货",
+    "PART_SHIPPED": "部分发货",
+    "SHIPPED": "已发货",
+    "FINISHED": "已完成",
+    "CLOSED": "已关闭",
+    "AFTER_SALE": "售后中",
+}
+
+# 订单来源
+ORDER_SOURCE = {"PLATFORM": "平台", "MANUAL": "手工"}
+
+# 订单同步类型标识
+ORDER_SYNC_TYPE = "ORDER"
+
+# 平台原始状态 → 统一状态码（键为平台编码，见《数据库设计》7.2）
+ORDER_STATUS_MAP: dict[str, dict[str, str]] = {
+    "TAOBAO": {
+        "WAIT_BUYER_PAY": "PENDING_PAY",
+        "PAID": "PENDING_AUDIT",
+        "WAIT_SELLER_SEND_GOODS": "PENDING_SHIP",
+        "PART_SENT": "PART_SHIPPED",
+        "WAIT_BUYER_CONFIRM_GOODS": "SHIPPED",
+        "TRADE_FINISHED": "FINISHED",
+        "TRADE_CLOSED": "CLOSED",
+        "REFUNDING": "AFTER_SALE",
+    },
+    "JD": {
+        "WAIT_PAY": "PENDING_PAY",
+        "PAID": "PENDING_AUDIT",
+        "WAIT_SHIP": "PENDING_SHIP",
+        "PART_SENT": "PART_SHIPPED",
+        "SHIPPED": "SHIPPED",
+        "FINISHED": "FINISHED",
+        "CLOSED": "CLOSED",
+        "REFUNDING": "AFTER_SALE",
+    },
+    "PDD": {
+        "待支付": "PENDING_PAY",
+        "已支付": "PENDING_AUDIT",
+        "待发货": "PENDING_SHIP",
+        "部分发货": "PART_SHIPPED",
+        "已发货": "SHIPPED",
+        "已完成": "FINISHED",
+        "已关闭": "CLOSED",
+        "售后中": "AFTER_SALE",
+    },
+    "DOUYIN": {
+        "待支付": "PENDING_PAY",
+        "已支付": "PENDING_AUDIT",
+        "待发货": "PENDING_SHIP",
+        "部分发货": "PART_SHIPPED",
+        "已发货": "SHIPPED",
+        "已完成": "FINISHED",
+        "已关闭": "CLOSED",
+        "售后中": "AFTER_SALE",
+    },
+    "SELF": {
+        "pending_pay": "PENDING_PAY",
+        "paid": "PENDING_AUDIT",
+        "wait_ship": "PENDING_SHIP",
+        "part_sent": "PART_SHIPPED",
+        "shipped": "SHIPPED",
+        "finished": "FINISHED",
+        "closed": "CLOSED",
+        "after_sale": "AFTER_SALE",
+    },
+}
+
 # 操作日志所属模块
 LOG_MODULES = {
     "AUTH": "登录认证",
@@ -59,4 +131,5 @@ LOG_MODULES = {
     "PLATFORM": "平台管理",
     "SHOP": "店铺管理",
     "SYNC": "同步任务",
+    "ORDER": "订单管理",
 }
