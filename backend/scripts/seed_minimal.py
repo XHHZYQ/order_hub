@@ -399,7 +399,7 @@ def seed_users(session: Session, roles: dict[str, Role]) -> dict[str, User]:
 def seed_role_shops(session: Session, roles: dict[str, Role], shops: dict[str, Shop]) -> None:
     all_shop_ids = [s.id for s in shops.values()]
     # 客服仅可见部分店铺，其余角色可见全部店铺
-    cs_shop_ids = [shops[c].id for c in ("TAOBAO", "JD001", "PDD001", "DOUYIN", "DY001")[:3]]
+    cs_shop_ids = [shops[c].id for c in ("TB001", "JD001", "PDD001") if c in shops]
     scope = {
         "SUPER_ADMIN": all_shop_ids,
         "OPERATION": all_shop_ids,
