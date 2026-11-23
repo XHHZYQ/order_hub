@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # 数据库
-    DATABASE_URL: str = "postgresql+psycopg://order-hub:order-hub@localhost:5432/order-hub"
+    DATABASE_URL: str = "postgresql+psycopg://order_hub:order_hub@127.0.0.1:5433/order_hub"
     DB_ECHO: bool = False
 
     # JWT
