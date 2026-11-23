@@ -125,11 +125,14 @@
 
           <div class="section-title">变更记录</div>
           <el-table :data="logs.changes" stripe border>
-            <el-table-column prop="field_label" label="变更字段" width="140" />
-            <el-table-column prop="old_value" label="变更前" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="new_value" label="变更后" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="change_type" label="变更类型" width="110" />
+            <el-table-column label="变更字段" width="140">
+              <template #default="{ row }">{{ FIELD_LABELS[row.field_name] || row.field_name }}</template>
+            </el-table-column>
+            <el-table-column prop="before_value" label="变更前" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="after_value" label="变更后" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="reason" label="变更原因" min-width="150" show-overflow-tooltip />
             <el-table-column prop="operator" label="操作人" width="120" />
-            <el-table-column prop="source" label="来源" width="90" />
             <el-table-column label="变更时间" min-width="170">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
             </el-table-column>
@@ -160,6 +163,27 @@ const detail = ref<Order | null>(null)
 const items = ref<OrderItem[]>([])
 const ext = ref<OrderExt[]>([])
 const logs = ref<OrderLogResult>({ logs: [], changes: [] })
+
+// 变更字段中文名（仅前端展示映射，数据库字段名保持与《数据库设计》一致）
+const FIELD_LABELS: Record<string, string> = {
+  status: '订单状态',
+  platform_status: '平台原始状态',
+  goods_amount: '商品金额',
+  discount_amount: '优惠金额',
+  freight_amount: '运费',
+  pay_amount: '实付金额',
+  receiver_name: '收件人',
+  receiver_phone: '收件人电话',
+  receiver_province: '省份',
+  receiver_city: '城市',
+  receiver_district: '区县',
+  receiver_address: '详细地址',
+  buyer_account: '买家账号',
+  buyer_nick: '买家昵称',
+  merchant_remark: '商家备注',
+  buyer_remark: '买家备注',
+  tags: '订单标签',
+}
 
 const regionText = computed(() => {
   const d = detail.value

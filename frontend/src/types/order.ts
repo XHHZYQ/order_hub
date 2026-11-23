@@ -93,12 +93,12 @@ export interface OrderLog {
 
 /** 订单变更记录 */
 export interface OrderChange {
+  change_type?: string
   field_name: string
-  field_label: string
-  old_value?: string
-  new_value?: string
+  before_value?: string
+  after_value?: string
+  reason?: string
   operator?: string
-  source?: string
   created_at: string
 }
 

@@ -175,7 +175,7 @@ class OrderLog(SQLModel, table=True):
 class OrderChange(SQLModel, table=True):
     """订单变更记录 order_change（M2，见《数据库设计》4.2.5）。
 
-    记录字段级变更：字段名/中文名/变更前后值，用于订单详情页展示变更历史。
+    记录字段级变更：变更类型、变更字段、变更前后值与原因，用于订单详情页展示变更历史。
     """
 
     __tablename__ = "order_change"
@@ -186,12 +186,12 @@ class OrderChange(SQLModel, table=True):
     )
     order_id: int = Field(sa_column=Column(BigInteger, nullable=False))
     order_no: str = Field(sa_column=Column(String(32), nullable=False))
+    change_type: str | None = Field(default=None, sa_column=Column(String(16)))
     field_name: str = Field(sa_column=Column(String(64), nullable=False))
-    field_label: str | None = Field(default=None, sa_column=Column(String(64)))
-    old_value: str | None = Field(default=None, sa_column=Column(String(500)))
-    new_value: str | None = Field(default=None, sa_column=Column(String(500)))
+    before_value: str | None = Field(default=None, sa_column=Column(String(500)))
+    after_value: str | None = Field(default=None, sa_column=Column(String(500)))
+    reason: str | None = Field(default=None, sa_column=Column(String(255)))
     operator: str | None = Field(default=None, sa_column=Column(String(64)))
-    source: str | None = Field(default=None, sa_column=Column(String(16)))
     created_at: datetime = Field(
         default_factory=_utcnow,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),

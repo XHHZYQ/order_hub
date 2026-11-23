@@ -51,23 +51,28 @@ def _pick_unified_status(rng: random.Random) -> str:
     return rng.choices(keys, weights=weights, k=1)[0]
 
 
-def _build_items(rng: random.Random, platform_code: str) -> tuple[list[dict], float, float]:
-    """生成明细列表，返回 (原始明细列表, 商品金额合计, 明细优惠合计)。"""
+def _build_items(rng: random.Random, platform_code: str, shop_code: str) -> tuple[list[dict], float, float]:
+    """生成明细列表，返回 (原始明细列表, 商品金额合计, 明细优惠合计)。
+
+    platform_sku_id 采用确定性编码 platform_sku_code(店铺, SPU, 规格序号)，
+    与种子数据中的平台规格/SKU 映射口径一致，使同步时能命中映射。
+    """
     item_fm = seed.ITEM_FIELD_MAP[platform_code]
     items: list[dict] = []
     goods_total = 0.0
     discount_total = 0.0
     for _ in range(rng.randint(1, 3)):
-        name, _spu, spec, price = seed.random_product(rng)
+        detail = seed.random_product_detail(rng)
+        name, spec, price = detail["name"], detail["spec"], detail["price"]
         qty = rng.randint(1, 3)
         total = round(price * qty, 2)
         discount = round(total * rng.choice([0, 0, 0, 0, 0.05, 0.1]), 2)
         pay = round(total - discount, 2)
         items.append(
             {
-                item_fm["platform_sku_id"]: str(rng.randint(10**8, 10**9 - 1)),
+                item_fm["platform_sku_id"]: seed.platform_sku_code(shop_code, detail["spu"], detail["spec_index"]),
                 item_fm["platform_sku_name"]: f"{name} {spec}",
-                item_fm["outer_sku_code"]: f"OSK{rng.randint(100000, 999999)}",
+                item_fm["outer_sku_code"]: detail["sku_code"],
                 item_fm["product_name"]: name,
                 item_fm["spec_desc"]: spec,
                 item_fm["price"]: f"{price:.2f}",
@@ -137,7 +142,7 @@ def _build_one(
     """构造单条订单原始数据。"""
     account, nick = seed.random_buyer(rng, platform_code)
     receiver = seed.random_receiver(rng)
-    items, goods_total, item_discount = _build_items(rng, platform_code)
+    items, goods_total, item_discount = _build_items(rng, platform_code, shop.shop_code)
 
     freight = rng.choice([0.0, 0.0, 0.0, 8.0, 12.0, 15.0])
     discount = item_discount

@@ -54,7 +54,14 @@
         <el-button v-permission="'order:sync'" :icon="Warning" @click="openErrors">同步异常</el-button>
       </template>
 
-      <el-table v-loading="loading" :data="list" stripe border @row-click="handleRowClick">
+      <el-table
+        v-loading="loading"
+        class="clickable-table"
+        :data="list"
+        stripe
+        border
+        @row-click="handleRowClick"
+      >
         <el-table-column prop="order_no" label="订单号" min-width="180" show-overflow-tooltip />
         <el-table-column prop="platform_name" label="平台" min-width="110" />
         <el-table-column prop="shop_name" label="店铺" min-width="150" show-overflow-tooltip />
@@ -379,5 +386,17 @@ onMounted(fetchList)
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+/* 可点击行：鼠标悬浮手型 + 高亮，提示该行可进入详情 */
+.clickable-table {
+  :deep(.el-table__row) {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  :deep(.el-table__body tr:hover > td.el-table__cell) {
+    background-color: var(--el-color-primary-light-9) !important;
+  }
 }
 </style>

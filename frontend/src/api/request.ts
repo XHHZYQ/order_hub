@@ -41,6 +41,13 @@ service.interceptors.request.use(
         params.page_size = MAX_PAGE_SIZE
       }
     }
+    // FormData 上传：移除默认的 application/json，交给浏览器自动带上 multipart boundary
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      const headers = config.headers as unknown as { delete?: (key: string) => void }
+      if (typeof headers.delete === 'function') {
+        headers.delete('Content-Type')
+      }
+    }
     return config
   },
   (error) => Promise.reject(error),
@@ -48,7 +55,8 @@ service.interceptors.request.use(
 
 // 响应拦截：统一解包 { code, message, data }
 service.interceptors.response.use(
-  (response: AxiosResponse<ApiResponse>) => {
+  // 解包后返回业务 data，类型与 AxiosResponse 不一致，故显式声明为 any
+  (response: AxiosResponse<ApiResponse>): any => {
     const res = response.data
     // 非 JSON 响应（如文件流）直接返回
     if (res === undefined || res === null || typeof res !== 'object' || !('code' in res)) {

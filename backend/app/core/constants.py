@@ -65,6 +65,26 @@ ORDER_STATUS: dict[str, str] = {
 # 订单来源
 ORDER_SOURCE = {"PLATFORM": "平台", "MANUAL": "手工"}
 
+# 库存变动类型（inventory_flow.flow_type，见《数据库设计》6.3）
+INVENTORY_FLOW_TYPE: dict[str, str] = {
+    "PURCHASE_IN": "采购入库",
+    "ORDER_OCCUPY": "订单占用",
+    "ORDER_RELEASE": "订单释放",
+    "SHIP_DEDUCT": "发货扣减",
+    "RETURN_IN": "退货入库",
+    "STOCKTAKE": "盘点调整",
+}
+
+# 库存流水来源类型（inventory_flow.source_type）
+INVENTORY_SOURCE_TYPE: dict[str, str] = {
+    "ORDER": "订单",
+    "STOCKTAKE": "盘点",
+    "PURCHASE": "采购",
+}
+
+# 库存状态
+INVENTORY_STATUS: dict[int, str] = {1: "正常", 0: "停用"}
+
 # 订单同步类型标识
 ORDER_SYNC_TYPE = "ORDER"
 
@@ -132,4 +152,7 @@ LOG_MODULES = {
     "SHOP": "店铺管理",
     "SYNC": "同步任务",
     "ORDER": "订单管理",
+    "PRODUCT": "商品管理",
+    "MAPPING": "SKU映射",
+    "INVENTORY": "库存管理",
 }

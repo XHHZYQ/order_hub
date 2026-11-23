@@ -5,6 +5,8 @@
 
 覆盖表：platform / shop / role / permission / role_permission / user / user_role /
 role_shop / sync_task / sync_log / operation_log /
+product / sku / platform_product / platform_sku / sku_mapping /
+inventory / inventory_flow / inventory_share / inventory_alert /
 orders / order_item / order_ext / order_log / order_change
 """
 
@@ -28,7 +30,20 @@ from app.models.order import (  # noqa: E402
     OrderItem,
     OrderLog,
 )
+from app.models.inventory import (  # noqa: E402
+    Inventory,
+    InventoryAlert,
+    InventoryFlow,
+    InventoryShare,
+)
 from app.models.platform import Platform, Shop, SyncLog, SyncTask  # noqa: E402
+from app.models.product import (  # noqa: E402
+    PlatformProduct,
+    PlatformSku,
+    Product,
+    Sku,
+    SkuMapping,
+)
 from app.models.system import (  # noqa: E402
     OperationLog,
     Permission,
@@ -162,6 +177,17 @@ BUTTONS = [
     ("order:sync", "同步/补单/异常处理", "order:list", 5),
     ("shipment:batch_ship", "批量发货", "shipment:ship", 1),
     ("inventory:edit", "库存调整", "inventory:list", 1),
+    ("inventory:push", "回写平台", "inventory:list", 2),
+    ("inventory:share_edit", "编辑共享", "inventory:share", 1),
+    ("inventory:alert_edit", "配置预警", "inventory:alert", 1),
+    ("product:create", "新增商品", "product:list", 1),
+    ("product:edit", "编辑商品", "product:list", 2),
+    ("product:delete", "删除商品", "product:list", 3),
+    ("mapping:create", "新增映射", "product:mapping", 1),
+    ("mapping:edit", "编辑映射", "product:mapping", 2),
+    ("mapping:delete", "删除映射", "product:mapping", 3),
+    ("mapping:import", "导入映射", "product:mapping", 4),
+    ("mapping:export", "导出映射", "product:mapping", 5),
     ("finance:import", "账单导入", "finance:bill", 1),
     ("finance:confirm_diff", "差异确认", "finance:difference", 1),
 ]
@@ -215,6 +241,15 @@ def with_menus(page_codes: list[str]) -> set[str]:
 
 def clear_tables(session: Session) -> None:
     for model in (
+        InventoryFlow,
+        InventoryAlert,
+        InventoryShare,
+        Inventory,
+        SkuMapping,
+        PlatformSku,
+        PlatformProduct,
+        Sku,
+        Product,
         OrderChange,
         OrderLog,
         OrderExt,
@@ -360,6 +395,15 @@ def role_permission_codes(page_codes: list[str]) -> dict[str, list[str]]:
                 "order:sync",
                 "shipment:batch_ship",
                 "inventory:edit",
+                "inventory:push",
+                "product:create",
+                "product:edit",
+                "product:delete",
+                "mapping:create",
+                "mapping:edit",
+                "mapping:delete",
+                "mapping:import",
+                "mapping:export",
                 "sync:trigger",
             }
         ),
@@ -369,7 +413,7 @@ def role_permission_codes(page_codes: list[str]) -> dict[str, list[str]]:
         ),
         "WAREHOUSE": sorted(
             with_menus(["dashboard:inventory", *ship_pages, *prod_pages])
-            | {"shipment:batch_ship", "inventory:edit"}
+            | {"shipment:batch_ship", "inventory:edit", "inventory:push", "inventory:share_edit", "inventory:alert_edit"}
         ),
         "FINANCE": sorted(
             with_menus(["dashboard:overview", "order:list", "order:detail", *fin_pages])
@@ -549,8 +593,12 @@ def _money(value: float) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"))
 
 
-def seed_orders(session: Session, shops: dict) -> int:
-    """生成贴近真实的订单数据（约 300~500 单，覆盖全部平台与店铺，跨度约 60 天）。"""
+def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> int:
+    """生成贴近真实的订单数据（约 300~500 单，覆盖全部平台与店铺，跨度约 60 天）。
+
+    明细的 platform_sku_id 采用确定性编码，可与 sku_mapping 命中；未命中者 is_matched=0。
+    mapping_lookup: {(shop_id, platform_sku_id): (sku_id, sku_code)}。
+    """
     rng = random.Random(ORDER_SEED)
     now = now_utc()
     used_pnos: set[str] = set()
@@ -593,22 +641,23 @@ def seed_orders(session: Session, shops: dict) -> int:
             goods = Decimal("0")
             disc = Decimal("0")
             for _ in range(rng.randint(1, 3)):
-                name, _spu, spec, price = seed.random_product(rng)
+                detail = seed.random_product_detail(rng)
                 qty = rng.randint(1, 3)
-                line_total = _money(price * qty)
+                line_total = _money(detail["price"] * qty)
                 line_disc = _money(float(line_total) * rng.choice([0, 0, 0, 0.05, 0.1]))
                 items.append(
                     {
-                        "platform_sku_id": str(rng.randint(10**8, 10**9 - 1)),
-                        "platform_sku_name": f"{name} {spec}",
-                        "outer_sku_code": f"OSK{rng.randint(100000, 999999)}",
-                        "product_name": name,
-                        "spec_desc": spec,
-                        "price": _money(price),
+                        "platform_sku_id": seed.platform_sku_code(shop.shop_code, detail["spu"], detail["spec_index"]),
+                        "platform_sku_name": f"{detail['name']} {detail['spec']}",
+                        "outer_sku_code": detail["sku_code"],
+                        "product_name": detail["name"],
+                        "spec_desc": detail["spec"],
+                        "price": _money(detail["price"]),
                         "quantity": qty,
                         "total_amount": line_total,
                         "discount_amount": line_disc,
                         "pay_amount": (line_total - line_disc).quantize(Decimal("0.01")),
+                        "local_sku_code": detail["sku_code"],
                     }
                 )
                 goods += line_total
@@ -673,6 +722,7 @@ def seed_orders(session: Session, shops: dict) -> int:
             session.flush()
 
             for item in items:
+                matched = mapping_lookup.get((shop.id, item["platform_sku_id"]))
                 session.add(
                     OrderItem(
                         order_id=order.id,
@@ -680,7 +730,8 @@ def seed_orders(session: Session, shops: dict) -> int:
                         platform_sku_id=item["platform_sku_id"],
                         platform_sku_name=item["platform_sku_name"],
                         outer_sku_code=item["outer_sku_code"],
-                        sku_code=item["outer_sku_code"],
+                        sku_id=matched[0] if matched else None,
+                        sku_code=matched[1] if matched else item["local_sku_code"],
                         product_name=item["product_name"],
                         spec_desc=item["spec_desc"],
                         price=item["price"],
@@ -690,7 +741,7 @@ def seed_orders(session: Session, shops: dict) -> int:
                         pay_amount=item["pay_amount"],
                         shipped_quantity=item["quantity"] if shipped_at else 0,
                         refund_quantity=0,
-                        is_matched=1 if rng.random() < 0.6 else 0,
+                        is_matched=1 if matched else 0,
                         created_at=order_time,
                     )
                 )
@@ -767,12 +818,12 @@ def seed_orders(session: Session, shops: dict) -> int:
                     OrderChange(
                         order_id=order.id,
                         order_no=order_no,
+                        change_type="改价",
                         field_name="pay_amount",
-                        field_label="实付金额",
-                        old_value=f"{old_pay:.2f}",
-                        new_value=f"{new_pay:.2f}",
+                        before_value=f"{old_pay:.2f}",
+                        after_value=f"{new_pay:.2f}",
+                        reason="平台侧买家改价",
                         operator="系统",
-                        source="系统",
                         created_at=change_time,
                     )
                 )
@@ -781,6 +832,279 @@ def seed_orders(session: Session, shops: dict) -> int:
 
     session.flush()
     return total
+
+
+# --------------------------------------------------------------------------- #
+# 商品与库存域（M4 / M5）
+# --------------------------------------------------------------------------- #
+CATEGORY_POOL = [
+    "服饰内衣", "服饰内衣", "手机数码", "手机数码", "家居家装", "家居家装", "个护清洁", "鞋靴箱包",
+    "鞋靴箱包", "厨具水具", "家居家装", "厨具水具", "手机数码", "手机数码", "手机数码", "家用电器",
+    "宠物用品", "个护清洁", "服饰内衣", "汽车用品",
+]
+BRAND_POOL = ["云选", "优选", "品质", "智选", "佳品"]
+UNIT_POOL = [
+    "件", "件", "个", "个", "个", "个", "支", "双", "个", "个", "个", "台", "个", "个", "台", "台",
+    "袋", "瓶", "条", "个",
+]
+# 库存流水类型 → (来源类型, 明细标注)，覆盖 6 种变动类型
+FLOW_PLAN = [
+    ("PURCHASE_IN", "PURCHASE", "采购入库"),
+    ("ORDER_OCCUPY", "ORDER", "订单占用"),
+    ("ORDER_RELEASE", "ORDER", "订单释放"),
+    ("SHIP_DEDUCT", "ORDER", "发货扣减"),
+    ("RETURN_IN", "ORDER", "退货入库"),
+    ("STOCKTAKE", "STOCKTAKE", "盘点调整"),
+]
+
+
+def seed_products(session: Session) -> tuple[dict[str, Product], dict[str, Sku], list[Sku]]:
+    """基于商品池生成本地 SPU 与 SKU。"""
+    products: dict[str, Product] = {}
+    sku_by_code: dict[str, Sku] = {}
+    skus: list[Sku] = []
+    for idx, (name, spu, base, specs) in enumerate(seed.PRODUCTS):
+        created = days_ago(200 - idx * 2)
+        status = 0 if idx % 11 == 7 else 1
+        product = Product(
+            spu_code=spu,
+            spu_name=name,
+            category_name=CATEGORY_POOL[idx % len(CATEGORY_POOL)],
+            brand=BRAND_POOL[idx % len(BRAND_POOL)],
+            unit=UNIT_POOL[idx % len(UNIT_POOL)],
+            status=status,
+            remark=None,
+            created_at=created,
+            updated_at=created,
+        )
+        session.add(product)
+        session.flush()
+        products[spu] = product
+        for si, (spec_desc, delta) in enumerate(specs, start=1):
+            sale = _money(base + delta)
+            sku = Sku(
+                sku_code=seed.local_sku_code(spu, si),
+                spu_id=product.id,
+                sku_name=f"{name} {spec_desc}",
+                spec_desc=spec_desc,
+                cost_price=_money(float(sale) * 0.62),
+                sale_price=sale,
+                status=status,
+                created_at=created,
+                updated_at=created,
+            )
+            session.add(sku)
+            session.flush()
+            sku_by_code[sku.sku_code] = sku
+            skus.append(sku)
+    return products, sku_by_code, skus
+
+
+def seed_platform_products(session: Session, shops: dict[str, Shop]) -> list[PlatformSku]:
+    """按启用店铺派生平台商品与平台规格（约 15% 商品不上架）。"""
+    platform_skus: list[PlatformSku] = []
+    for shop in shops.values():
+        if shop.status != 1:
+            continue
+        for idx, (name, spu, base, specs) in enumerate(seed.PRODUCTS):
+            if random.random() < 0.15:
+                continue
+            created = days_ago(random.randint(15, 150))
+            pp = PlatformProduct(
+                shop_id=shop.id,
+                platform_code=shop.platform_code,
+                platform_product_id=f"{shop.shop_code}{spu}",
+                product_title=name,
+                category_name=CATEGORY_POOL[idx % len(CATEGORY_POOL)],
+                status=random.choice(["在售", "在售", "在售", "下架"]),
+                sync_time=days_ago(random.randint(0, 5)),
+                created_at=created,
+            )
+            session.add(pp)
+            session.flush()
+            for si, (spec_desc, delta) in enumerate(specs, start=1):
+                ps = PlatformSku(
+                    platform_product_id=pp.id,
+                    shop_id=shop.id,
+                    platform_code=shop.platform_code,
+                    platform_sku_id=seed.platform_sku_code(shop.shop_code, spu, si),
+                    sku_name=f"{name} {spec_desc}",
+                    spec_desc=spec_desc,
+                    outer_sku_code=seed.local_sku_code(spu, si),
+                    price=_money(base + delta),
+                    platform_stock=random.choice([0, 5, 20, 80, 200, 500, 1200]),
+                    is_matched=0,
+                    sync_time=pp.sync_time,
+                    created_at=created,
+                )
+                session.add(ps)
+                platform_skus.append(ps)
+    session.flush()
+    return platform_skus
+
+
+def seed_sku_mappings(
+    session: Session, platform_skus: list[PlatformSku], sku_by_code: dict[str, Sku]
+) -> dict[tuple[int, str], tuple[int, str]]:
+    """建立平台规格→本地 SKU 映射（约 15% 保持未映射），并回写 is_matched。"""
+    lookup: dict[tuple[int, str], tuple[int, str]] = {}
+    for ps in platform_skus:
+        if random.random() < 0.15:
+            continue
+        sku = sku_by_code.get(ps.outer_sku_code or "")
+        if not sku:
+            continue
+        created = days_ago(random.randint(5, 120))
+        session.add(
+            SkuMapping(
+                platform_code=ps.platform_code,
+                shop_id=ps.shop_id,
+                platform_sku_id=ps.platform_sku_id,
+                platform_sku_name=ps.sku_name,
+                sku_id=sku.id,
+                sku_code=sku.sku_code,
+                status=1,
+                remark=None,
+                created_at=created,
+                updated_at=created,
+            )
+        )
+        ps.is_matched = 1
+        session.add(ps)
+        lookup[(ps.shop_id, ps.platform_sku_id)] = (sku.id, sku.sku_code)
+    session.flush()
+    return lookup
+
+
+def seed_inventory(session: Session, skus: list[Sku]) -> list[Inventory]:
+    """每个 SKU 一条库存记录（约 25% 低库存）。"""
+    rows: list[Inventory] = []
+    for idx, sku in enumerate(skus):
+        low = idx % 4 == 0
+        main_qty = random.randint(0, 30) if low else random.randint(120, 900)
+        occupied = random.randint(0, min(main_qty, 50))
+        row = Inventory(
+            sku_id=sku.id,
+            sku_code=sku.sku_code,
+            main_qty=main_qty,
+            occupied_qty=occupied,
+            status=1 if sku.status == 1 else 0,
+            updated_at=days_ago(random.randint(0, 5)),
+        )
+        session.add(row)
+        rows.append(row)
+    session.flush()
+    return rows
+
+
+def seed_inventory_alerts(session: Session, inv_rows: list[Inventory]) -> int:
+    """为约 80% SKU 配置预警阈值，低库存 SKU 保证触发。"""
+    count = 0
+    for row in inv_rows:
+        if random.random() >= 0.8:
+            continue
+        available = row.main_qty - row.occupied_qty
+        alert_qty = (available + random.randint(0, 20)) if available <= 30 else random.choice([10, 20, 30, 50])
+        session.add(
+            InventoryAlert(
+                sku_id=row.sku_id,
+                sku_code=row.sku_code,
+                alert_qty=alert_qty,
+                is_enabled=1 if random.random() < 0.85 else 0,
+                updated_at=days_ago(random.randint(0, 10)),
+            )
+        )
+        count += 1
+    session.flush()
+    return count
+
+
+def seed_inventory_flows(session: Session, inv_rows: list[Inventory]) -> int:
+    """生成库存流水，覆盖全部 6 种变动类型，含来源单号与时间跨度。"""
+    count = 0
+    for idx, inv in enumerate(inv_rows):
+        if idx < len(FLOW_PLAN):
+            chosen = [FLOW_PLAN[idx]]  # 前 6 个 SKU 各强制一种类型，确保全覆盖
+        else:
+            chosen = [random.choice(FLOW_PLAN) for _ in range(random.randint(0, 2))]
+        if not chosen:
+            continue
+        deltas: list[int] = []
+        for flow_type, _st, _cn in chosen:
+            if flow_type in ("PURCHASE_IN", "RETURN_IN"):
+                deltas.append(random.randint(10, 120))
+            elif flow_type == "SHIP_DEDUCT":
+                deltas.append(-random.randint(5, 60))
+            elif flow_type == "STOCKTAKE":
+                deltas.append(random.randint(-30, 30))
+            else:  # ORDER_OCCUPY / ORDER_RELEASE：主库存不变
+                deltas.append(0)
+        cursor = max(inv.main_qty - sum(deltas), 0)
+        flow_time = days_ago(random.randint(40, 100))
+        for (flow_type, source_type, cn_name), delta in zip(chosen, deltas):
+            before = cursor
+            cursor = max(cursor + delta, 0)
+            change = cursor - before
+            if flow_type == "PURCHASE_IN":
+                source_no = f"CG{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = "采购入库"
+            elif flow_type == "RETURN_IN":
+                source_no = f"OH{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = f"买家退货入库 {change} 件"
+            elif flow_type == "ORDER_OCCUPY":
+                source_no = f"OH{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = f"订单占用 {random.randint(1, 5)} 件"
+            elif flow_type == "ORDER_RELEASE":
+                source_no = f"OH{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = f"订单释放 {random.randint(1, 5)} 件"
+            elif flow_type == "SHIP_DEDUCT":
+                source_no = f"OH{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = f"发货扣减 {-change} 件"
+            else:  # STOCKTAKE
+                source_no = f"PD{flow_time:%Y%m%d}{random.randint(1000, 9999)}"
+                remark = cn_name
+            session.add(
+                InventoryFlow(
+                    sku_id=inv.sku_id,
+                    sku_code=inv.sku_code,
+                    flow_type=flow_type,
+                    change_qty=change,
+                    before_qty=before,
+                    after_qty=cursor,
+                    source_type=source_type,
+                    source_no=source_no,
+                    remark=remark,
+                    operator=random.choice(["admin", "ops01", "wh01", "系统"]),
+                    created_at=flow_time,
+                )
+            )
+            count += 1
+            flow_time = flow_time + timedelta(days=random.randint(1, 15))
+    session.flush()
+    return count
+
+
+def seed_inventory_shares(session: Session, skus: list[Sku], shops: dict[str, Shop]) -> int:
+    """约一半 SKU 在多个店铺间共享同一盘库存。"""
+    enabled = [s for s in shops.values() if s.status == 1]
+    count = 0
+    for idx, sku in enumerate(skus):
+        if idx % 2 != 0 or not enabled:
+            continue
+        for shop in random.sample(enabled, min(len(enabled), random.randint(1, 3))):
+            session.add(
+                InventoryShare(
+                    sku_id=sku.id,
+                    sku_code=sku.sku_code,
+                    shop_id=shop.id,
+                    platform_code=shop.platform_code,
+                    status=1,
+                    created_at=days_ago(random.randint(5, 100)),
+                )
+            )
+            count += 1
+    session.flush()
+    return count
 
 
 def main() -> None:
@@ -798,12 +1122,23 @@ def main() -> None:
         tasks = seed_sync_tasks(session, shops)
         seed_sync_logs(session, tasks)
         seed_operation_logs(session, users)
-        orders_count = seed_orders(session, shops)
+        products, sku_by_code, skus = seed_products(session)
+        platform_skus = seed_platform_products(session, shops)
+        mapping_lookup = seed_sku_mappings(session, platform_skus, sku_by_code)
+        orders_count = seed_orders(session, shops, mapping_lookup)
+        inv_rows = seed_inventory(session, skus)
+        alert_count = seed_inventory_alerts(session, inv_rows)
+        flow_count = seed_inventory_flows(session, inv_rows)
+        share_count = seed_inventory_shares(session, skus, shops)
 
         session.commit()
 
         print(f"[seed] 平台 {len(platforms)} / 店铺 {len(shops)} / 角色 {len(roles)} / 权限 {len(all_codes)}")
         print(f"[seed] 用户 {len(users)} / 同步任务 {len(tasks)} / 订单 {orders_count}")
+        print(
+            f"[seed] 商品 {len(products)} / SKU {len(skus)} / 平台规格 {len(platform_skus)} / 映射 {len(mapping_lookup)}"
+        )
+        print(f"[seed] 库存 {len(inv_rows)} / 预警 {alert_count} / 流水 {flow_count} / 共享 {share_count}")
         print("[seed] 同步日志与操作日志已生成")
         print("[seed] 默认密码：123456")
 

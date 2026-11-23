@@ -14,6 +14,7 @@ from app.core.constants import ORDER_SOURCE, ORDER_STATUS
 from app.core.exceptions import BusinessException, not_found, status_not_allowed
 from app.models.order import Order, OrderChange, OrderExt, OrderItem, OrderLog
 from app.models.platform import Platform, Shop
+from app.services import inventory_service, product_service
 from app.utils.datetime_util import format_datetime, now_utc, parse_datetime
 from app.utils.id_generator import gen_order_no
 from app.utils.pagination import normalize
@@ -282,29 +283,33 @@ def list_order_logs(session: Session, order_id: int) -> dict:
 # --------------------------------------------------------------------------- #
 # 同步（幂等汇聚）
 # --------------------------------------------------------------------------- #
-def _save_items(session: Session, order: Order, items: list[dict]) -> None:
+def _save_items(session: Session, order: Order, items: list[dict]) -> list[OrderItem]:
+    """落订单明细，并按 (shop_id, platform_sku_id) 匹配本地 SKU。"""
+    rows: list[OrderItem] = []
     for item in items:
-        session.add(
-            OrderItem(
-                order_id=order.id,
-                order_no=order.order_no,
-                platform_sku_id=item.get("platform_sku_id"),
-                platform_sku_name=item.get("platform_sku_name"),
-                outer_sku_code=item.get("outer_sku_code"),
-                sku_id=None,
-                sku_code=item.get("outer_sku_code"),
-                product_name=item.get("product_name"),
-                spec_desc=item.get("spec_desc"),
-                price=item.get("price") or Decimal("0"),
-                quantity=item.get("quantity") or 1,
-                total_amount=item.get("total_amount") or Decimal("0"),
-                discount_amount=item.get("discount_amount") or Decimal("0"),
-                pay_amount=item.get("pay_amount") or Decimal("0"),
-                shipped_quantity=0,
-                refund_quantity=0,
-                is_matched=0,
-            )
+        mapping = product_service.find_mapping(session, order.shop_id, item.get("platform_sku_id"))
+        row = OrderItem(
+            order_id=order.id,
+            order_no=order.order_no,
+            platform_sku_id=item.get("platform_sku_id"),
+            platform_sku_name=item.get("platform_sku_name"),
+            outer_sku_code=item.get("outer_sku_code"),
+            sku_id=mapping.sku_id if mapping else None,
+            sku_code=(mapping.sku_code if mapping else item.get("outer_sku_code")),
+            product_name=item.get("product_name"),
+            spec_desc=item.get("spec_desc"),
+            price=item.get("price") or Decimal("0"),
+            quantity=item.get("quantity") or 1,
+            total_amount=item.get("total_amount") or Decimal("0"),
+            discount_amount=item.get("discount_amount") or Decimal("0"),
+            pay_amount=item.get("pay_amount") or Decimal("0"),
+            shipped_quantity=0,
+            refund_quantity=0,
+            is_matched=1 if mapping else 0,
         )
+        session.add(row)
+        rows.append(row)
+    return rows
 
 
 def _save_ext(session: Session, order: Order, ext: list[dict]) -> None:
@@ -376,18 +381,95 @@ def _insert_order(session: Session, shop: Shop, payload: dict, sync_time: dateti
     session.add(order)
     session.flush()  # 生成主键，供明细/扩展落库使用
 
-    _save_items(session, order, payload.get("items") or [])
+    rows = _save_items(session, order, payload.get("items") or [])
     _save_ext(session, order, payload.get("ext") or [])
     _add_log(session, order, action="同步", content="首次汇聚订单", source="系统")
+    if order.status != "CLOSED":
+        _occupy_items(session, order, rows)
+
+
+def _occupy_items(session: Session, order: Order, rows: list[OrderItem]) -> None:
+    """对新汇聚订单的已匹配明细占用库存（防超卖，占用失败写订单日志）。"""
+    for row in rows:
+        if not row.sku_id or not row.quantity:
+            continue
+        result = inventory_service.occupy_stock(
+            session,
+            sku_id=row.sku_id,
+            qty=row.quantity,
+            source_no=order.order_no,
+            remark=f"订单 {order.order_no} 占用",
+            raise_on_fail=False,
+        )
+        if not result.get("success"):
+            _add_log(
+                session,
+                order,
+                action="库存占用",
+                content=f"占用失败：{result.get('reason')}（SKU {row.sku_code} 数量 {row.quantity}）",
+                source="系统",
+                to_status=order.status,
+            )
+
+
+def _release_items(session: Session, order: Order) -> None:
+    """订单关闭时释放其已匹配明细占用的库存。"""
+    rows = session.exec(
+        select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.sku_id.is_not(None))
+    ).all()
+    for row in rows:
+        if not row.quantity:
+            continue
+        result = inventory_service.release_stock(
+            session,
+            sku_id=row.sku_id,
+            qty=row.quantity,
+            source_no=order.order_no,
+            remark=f"订单 {order.order_no} 关闭释放",
+            raise_on_fail=False,
+        )
+        if not result.get("success"):
+            _add_log(
+                session,
+                order,
+                action="库存释放",
+                content=f"释放失败：{result.get('reason')}（SKU {row.sku_code} 数量 {row.quantity}）",
+                source="系统",
+                to_status=order.status,
+            )
+
+
+# 变更类型映射（见《数据库设计》4.2.5：改价/改址/备注/打标；状态类归为"状态"）
+_CHANGE_TYPE_BY_FIELD = {
+    "goods_amount": "改价",
+    "discount_amount": "改价",
+    "freight_amount": "改价",
+    "pay_amount": "改价",
+    "receiver_name": "改址",
+    "receiver_phone": "改址",
+    "receiver_province": "改址",
+    "receiver_city": "改址",
+    "receiver_district": "改址",
+    "receiver_address": "改址",
+    "merchant_remark": "备注",
+    "buyer_remark": "备注",
+    "tags": "打标",
+}
+
+
+def _change_type(field_name: str) -> str:
+    """按变更字段推导变更类型。"""
+    return _CHANGE_TYPE_BY_FIELD.get(field_name, "状态")
 
 
 def _update_order(session: Session, order: Order, payload: dict, sync_time: datetime) -> None:
     """按平台最新数据更新已存在订单；已进入发货流程的订单仅更新同步时间与平台状态。"""
-    changes: list[tuple[str, str, str, str]] = []
+    changes: list[tuple[str, str, str]] = []
+    old_status = order.status
 
     if payload.get("platform_status") != order.platform_status:
         changes.append(
-            ("platform_status", FIELD_LABELS["platform_status"], _display(order.platform_status), _display(payload.get("platform_status")))
+            ("platform_status", _display(order.platform_status), _display(payload.get("platform_status")))
         )
         order.platform_status = payload.get("platform_status")
     order.sync_time = sync_time
@@ -418,7 +500,7 @@ def _update_order(session: Session, order: Order, payload: dict, sync_time: date
                 continue
             if _display(getattr(order, field)) == _display(new_value):
                 continue
-            changes.append((field, FIELD_LABELS.get(field, field), _display(getattr(order, field)), _display(new_value)))
+            changes.append((field, _display(getattr(order, field)), _display(new_value)))
             setattr(order, field, new_value)
 
     if payload.get("anomaly"):
@@ -426,23 +508,27 @@ def _update_order(session: Session, order: Order, payload: dict, sync_time: date
         order.abnormal_reason = payload["anomaly"]
 
     session.add(order)
-    for field_name, field_label, old_value, new_value in changes:
+    for field_name, before_value, after_value in changes:
         session.add(
             OrderChange(
                 order_id=order.id,
                 order_no=order.order_no,
+                change_type=_change_type(field_name),
                 field_name=field_name,
-                field_label=field_label,
-                old_value=old_value,
-                new_value=new_value,
+                before_value=before_value,
+                after_value=after_value,
+                reason=None,
                 operator=None,
-                source="系统",
             )
         )
     content = (
-        f"平台数据更新：{'、'.join(c[1] for c in changes)}" if changes else "重复同步，数据无变化"
+        f"平台数据更新：{'、'.join(FIELD_LABELS.get(c[0], c[0]) for c in changes)}"
+        if changes
+        else "重复同步，数据无变化"
     )
     _add_log(session, order, action="同步", content=content, source="系统")
+    if old_status != "CLOSED" and order.status == "CLOSED":
+        _release_items(session, order)
 
 
 def run_order_sync(session: Session, *, shops: list[Shop], start: datetime, end: datetime) -> dict:

@@ -33,6 +33,11 @@ import {
   AUTH_STATUS_DICT,
   ORDER_STATUS_DICT,
   ORDER_SOURCE_DICT,
+  INVENTORY_FLOW_TYPE_DICT,
+  INVENTORY_SOURCE_TYPE_DICT,
+  INVENTORY_STATUS_DICT,
+  INVENTORY_LEVEL_DICT,
+  MATCH_STATUS_DICT,
 } from '@/store/dict'
 import type { Option } from '@/types'
 
@@ -46,6 +51,11 @@ type DictType =
   | 'trigger'
   | 'orderStatus'
   | 'orderSource'
+  | 'flowType'
+  | 'sourceType'
+  | 'inventoryStatus'
+  | 'inventoryLevel'
+  | 'matchStatus'
 
 interface Props {
   modelValue?: string | number | (string | number)[] | null
@@ -96,6 +106,16 @@ const options = computed<Option[]>(() => {
       return ORDER_STATUS_DICT
     case 'orderSource':
       return ORDER_SOURCE_DICT
+    case 'flowType':
+      return INVENTORY_FLOW_TYPE_DICT
+    case 'sourceType':
+      return INVENTORY_SOURCE_TYPE_DICT
+    case 'inventoryStatus':
+      return INVENTORY_STATUS_DICT
+    case 'inventoryLevel':
+      return INVENTORY_LEVEL_DICT
+    case 'matchStatus':
+      return MATCH_STATUS_DICT
     default:
       return []
   }

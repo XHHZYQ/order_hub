@@ -12,6 +12,7 @@ export interface MenuGroup {
 export const MENU_GROUPS: MenuGroup[] = [
   { key: 'dashboard', title: '数据看板', icon: 'DataLine' },
   { key: 'order', title: '订单中心', icon: 'Tickets' },
+  { key: 'product', title: '商品与库存', icon: 'Goods' },
   { key: 'platform', title: '平台与店铺', icon: 'Shop' },
   { key: 'system', title: '系统管理', icon: 'Setting' },
 ]
@@ -46,6 +47,55 @@ export const layoutChildren: RouteRecordRaw[] = [
     name: 'OrderDetail',
     component: () => import('@/views/order/detail.vue'),
     meta: { title: '订单详情', icon: 'Document', group: 'order', perm: 'order:detail', hidden: true },
+  },
+  // 商品与库存（M4 商品与 SKU 映射 + M5 库存同步与防超卖）
+  {
+    path: '/product/list',
+    name: 'ProductList',
+    component: () => import('@/views/product/list.vue'),
+    meta: { title: '本地商品', icon: 'Goods', group: 'product', perm: 'product:list' },
+  },
+  {
+    path: '/product/platform',
+    name: 'ProductPlatform',
+    component: () => import('@/views/product/platform.vue'),
+    meta: { title: '平台商品', icon: 'ShoppingBag', group: 'product', perm: 'product:platform' },
+  },
+  {
+    path: '/product/mapping',
+    name: 'ProductMapping',
+    component: () => import('@/views/product/mapping.vue'),
+    meta: { title: 'SKU 映射', icon: 'Connection', group: 'product', perm: 'product:mapping' },
+  },
+  {
+    path: '/inventory/list',
+    name: 'InventoryList',
+    component: () => import('@/views/inventory/list.vue'),
+    meta: { title: '库存管理', icon: 'Box', group: 'product', perm: 'inventory:list' },
+  },
+  {
+    path: '/inventory/flow',
+    name: 'InventoryFlow',
+    component: () => import('@/views/inventory/flow.vue'),
+    meta: { title: '库存流水', icon: 'List', group: 'product', perm: 'inventory:flow' },
+  },
+  {
+    path: '/inventory/share',
+    name: 'InventoryShare',
+    component: () => import('@/views/inventory/share.vue'),
+    meta: { title: '库存共享', icon: 'Share', group: 'product', perm: 'inventory:share' },
+  },
+  {
+    path: '/inventory/alert',
+    name: 'InventoryAlert',
+    component: () => import('@/views/inventory/alert.vue'),
+    meta: { title: '库存预警', icon: 'Warning', group: 'product', perm: 'inventory:alert' },
+  },
+  {
+    path: '/inventory/stocktake',
+    name: 'InventoryStocktake',
+    component: () => import('@/views/inventory/stocktake.vue'),
+    meta: { title: '库存盘点', icon: 'Memo', group: 'product', perm: 'inventory:stocktake' },
   },
   // 平台与店铺（M1）
   {

@@ -17,8 +17,8 @@ interface StatusOption {
 
 interface Props {
   value: string | number | null | undefined
-  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 */
-  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'custom'
+  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 / match 匹配状态 / inventoryLevel 库存水平 / custom */
+  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'match' | 'inventoryLevel' | 'custom'
   /** 自定义映射（scene=custom 时使用） */
   options?: Record<string | number, StatusOption>
   effect?: 'light' | 'dark' | 'plain'
@@ -66,6 +66,17 @@ const SCENE_MAP: Record<string, Record<string | number, StatusOption>> = {
     FINISHED: { label: '已完成', type: 'success' },
     CLOSED: { label: '已关闭', type: 'info' },
     AFTER_SALE: { label: '售后中', type: 'danger' },
+  },
+  // 匹配状态（是否已映射本地 SKU）
+  match: {
+    1: { label: '已匹配', type: 'success' },
+    0: { label: '未匹配', type: 'warning' },
+  },
+  // 库存水平（见《项目结构》7.4：正常=成功、低于安全库存=警告、缺货=危险）
+  inventoryLevel: {
+    NORMAL: { label: '正常', type: 'success' },
+    LOW: { label: '低于安全库存', type: 'warning' },
+    OUT: { label: '缺货', type: 'danger' },
   },
 }
 

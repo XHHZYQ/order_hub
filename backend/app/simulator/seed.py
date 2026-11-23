@@ -355,6 +355,42 @@ def random_product(rng: random.Random) -> tuple[str, str, str, float]:
     return name, spu, spec_desc, price
 
 
+def local_sku_code(spu_code: str, spec_index: int) -> str:
+    """本地 SKU 编码（确定性）：SKU + SPU 数字部分 + 两位规格序号。
+
+    例：SPU10001 的第 1 个规格 → SKU1000101。
+    """
+    digits = spu_code[3:] if spu_code.upper().startswith("SPU") else spu_code
+    return f"SKU{digits}{spec_index:02d}"
+
+
+def platform_sku_code(shop_code: str, spu_code: str, spec_index: int) -> str:
+    """平台规格 ID（确定性）：店铺编码-SPU 编码-两位规格序号。
+
+    例：TB001 店铺的 SPU10001 第 1 个规格 → TB001-SPU10001-01。
+    订单明细与平台规格/映射共用该编码，保证同步时能命中映射。
+    """
+    return f"{shop_code}-{spu_code}-{spec_index:02d}"
+
+
+def random_product_detail(rng: random.Random) -> dict:
+    """随机取一个商品规格，返回含确定性编码的明细基础信息。
+
+    返回键：name / spu / spec / price / spec_index（1 起）/ sku_code。
+    """
+    name, spu, base, specs = rng.choice(PRODUCTS)
+    index = rng.randrange(len(specs))
+    spec_desc, delta = specs[index]
+    return {
+        "name": name,
+        "spu": spu,
+        "spec": spec_desc,
+        "price": round(base + delta, 2),
+        "spec_index": index + 1,
+        "sku_code": local_sku_code(spu, index + 1),
+    }
+
+
 def random_buyer(rng: random.Random, platform_code: str) -> tuple[str, str]:
     """随机买家，返回 (账号, 昵称)。"""
     prefix = PLATFORM_PREFIX.get(platform_code, "u")

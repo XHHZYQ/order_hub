@@ -30,6 +30,14 @@ EXTRA_DDL: list[str] = [
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_orders_order_no ON orders (order_no)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_orders_platform_shop_no ON orders (platform_code, shop_id, platform_order_no)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_order_ext_order_key ON order_ext (order_id, ext_key)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_product_spu_code ON product (spu_code)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_sku_sku_code ON sku (sku_code)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_platform_product ON platform_product (shop_id, platform_product_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_platform_sku ON platform_sku (shop_id, platform_sku_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_sku_mapping ON sku_mapping (shop_id, platform_sku_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_sku_id ON inventory (sku_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_share ON inventory_share (sku_id, shop_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_alert_sku_id ON inventory_alert (sku_id)',
     # 5.2 常用索引
     'CREATE INDEX IF NOT EXISTS idx_sync_log_task_created ON sync_log (task_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_operation_log_created ON operation_log (created_at)',
@@ -41,6 +49,12 @@ EXTRA_DDL: list[str] = [
     'CREATE INDEX IF NOT EXISTS idx_order_item_sku_id ON order_item (sku_id)',
     'CREATE INDEX IF NOT EXISTS idx_order_log_order_id ON order_log (order_id)',
     'CREATE INDEX IF NOT EXISTS idx_order_change_order_id ON order_change (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_sku_spu_id ON sku (spu_id)',
+    'CREATE INDEX IF NOT EXISTS idx_platform_product_shop_id ON platform_product (shop_id)',
+    'CREATE INDEX IF NOT EXISTS idx_platform_sku_platform_product_id ON platform_sku (platform_product_id)',
+    'CREATE INDEX IF NOT EXISTS idx_sku_mapping_sku_id ON sku_mapping (sku_id)',
+    'CREATE INDEX IF NOT EXISTS idx_inventory_flow_sku_created ON inventory_flow (sku_id, created_at)',
+    'CREATE INDEX IF NOT EXISTS idx_inventory_share_shop_id ON inventory_share (shop_id)',
 ]
 
 
