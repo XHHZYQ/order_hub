@@ -65,12 +65,12 @@
   --el-text-color-primary-light: rgba(30, 41, 59, 0.6);
 
   // 背景
-  --el-bg-color: rgba(255, 255, 255, 0.6);
+  --el-bg-color: rgba(255, 255, 255, 0.75);
   --el-bg-color-page: #f8fafc;
   --el-bg-color-overlay: rgba(255, 255, 255, 0.8);
   --el-fill-color-blank: rgba(255, 255, 255, 0.6);
   --el-fill-color-light: rgba(226, 232, 240, 0.35);
-  --el-fill-color-lighter: rgba(226, 232, 240, 0.25);
+  --el-fill-color-lighter: rgba(226, 232, 240, 0.85);
   --el-mask-color: rgba(30, 41, 59, 0.3);
 
   // 边框
@@ -104,7 +104,7 @@
   --el-table-header-bg-color: rgba(226, 232, 240, 0.4);
   --el-table-header-text-color: var(--color-text-base);
   --el-table-bg-color: transparent;
-  --el-table-tr-bg-color: transparent;
+  --el-table-tr-bg-color: rgba(255, 255, 255, 0.85);
   --el-table-row-hover-bg-color: rgba(99, 102, 241, 0.06);
   background-color: transparent;
 }
