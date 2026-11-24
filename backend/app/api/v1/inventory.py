@@ -81,6 +81,7 @@ def list_flows(
 def list_shares(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
+    keyword: str | None = None,
     sku_id: int | None = None,
     shop_id: int | None = None,
     platform_code: str | None = None,
@@ -93,6 +94,7 @@ def list_shares(
         session,
         page=page,
         page_size=page_size,
+        keyword=keyword,
         sku_id=sku_id,
         shop_id=shop_id,
         platform_code=platform_code,

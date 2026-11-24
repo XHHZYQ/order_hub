@@ -29,8 +29,9 @@ _FLOW_TIME_FIELDS = ("created_at",)
 _SHARE_TIME_FIELDS = ("created_at",)
 
 
-def _op(operator) -> str | None:
-    return operator.username if operator else None
+def _op(operator) -> str:
+    """操作人显示名：接口调用取当前用户，系统自动触发的流水记为「系统」。"""
+    return operator.username if operator else "系统"
 
 
 def _fmt(data: dict, fields: tuple[str, ...]) -> dict:
@@ -44,6 +45,9 @@ def _flow_dict(row: InventoryFlow) -> dict:
     data = _fmt(row.model_dump(), _FLOW_TIME_FIELDS)
     data["flow_type_name"] = INVENTORY_FLOW_TYPE.get(row.flow_type, row.flow_type)
     data["source_type_name"] = INVENTORY_SOURCE_TYPE.get(row.source_type, row.source_type)
+    # 历史自动流水可能未记录操作人，展示层兜底为「系统」
+    if not data.get("operator"):
+        data["operator"] = "系统"
     return data
 
 
@@ -245,7 +249,18 @@ def list_flows(
     rows = session.exec(
         select(InventoryFlow).where(*conditions).order_by(InventoryFlow.id.desc()).offset(offset).limit(s)
     ).all()
-    return [_flow_dict(row) for row in rows], int(total)
+    sku_names = {
+        sku_id: name
+        for sku_id, name in session.exec(
+            select(Sku.id, Sku.sku_name).where(Sku.id.in_({row.sku_id for row in rows} or [-1]))
+        ).all()
+    }
+    items = []
+    for row in rows:
+        data = _flow_dict(row)
+        data["sku_name"] = sku_names.get(row.sku_id)
+        items.append(data)
+    return items, int(total)
 
 
 # --------------------------------------------------------------------------- #
@@ -301,6 +316,7 @@ def list_shares(
     *,
     page: int | None,
     page_size: int | None,
+    keyword: str | None = None,
     sku_id: int | None = None,
     shop_id: int | None = None,
     platform_code: str | None = None,
@@ -317,6 +333,12 @@ def list_shares(
         conditions.append(InventoryShare.platform_code == platform_code)
     if status is not None:
         conditions.append(InventoryShare.status == status)
+    if keyword:
+        like = f"%{keyword}%"
+        sku_ids = session.exec(select(Sku.id).where(Sku.sku_name.like(like))).all()
+        conditions.append(
+            or_(InventoryShare.sku_code.like(like), InventoryShare.sku_id.in_(list(sku_ids) or [-1]))
+        )
     if allowed_shop_ids is not None:
         conditions.append(InventoryShare.shop_id.in_(allowed_shop_ids or [-1]))
 

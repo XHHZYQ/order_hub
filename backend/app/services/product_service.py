@@ -227,6 +227,17 @@ def _shop_names(session: Session, shop_ids: list[int]) -> dict[int, str]:
     return {int(sid): name for sid, name in rows}
 
 
+def _platform_names(session: Session, codes: list[str | None]) -> dict[str, str]:
+    """按平台编码取平台名称，用于列表/详情展示。"""
+    valid = {c for c in codes if c}
+    if not valid:
+        return {}
+    rows = session.exec(
+        select(Platform.platform_code, Platform.platform_name).where(Platform.platform_code.in_(valid))
+    ).all()
+    return {code: name for code, name in rows}
+
+
 def list_platform_products(
     session: Session,
     *,
@@ -271,11 +282,13 @@ def list_platform_products(
         ).all()
         sku_counts = {int(pid): int(cnt) for pid, cnt in counts}
     shop_names = _shop_names(session, [r.shop_id for r in rows])
+    platform_names = _platform_names(session, [r.platform_code for r in rows])
 
     items = []
     for row in rows:
         data = _fmt(row.model_dump(), _PLATFORM_TIME_FIELDS)
         data["shop_name"] = shop_names.get(row.shop_id)
+        data["platform_name"] = platform_names.get(row.platform_code)
         data["sku_count"] = sku_counts.get(row.id, 0)
         items.append(data)
     return items, int(total)
@@ -288,6 +301,7 @@ def get_platform_product(session: Session, platform_product_id: int) -> dict:
         raise not_found("平台商品不存在")
     data = _fmt(row.model_dump(), _PLATFORM_TIME_FIELDS)
     data["shop_name"] = _shop_names(session, [row.shop_id]).get(row.shop_id)
+    data["platform_name"] = _platform_names(session, [row.platform_code]).get(row.platform_code)
     skus = session.exec(
         select(PlatformSku)
         .where(PlatformSku.platform_product_id == platform_product_id)
