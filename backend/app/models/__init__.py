@@ -1,6 +1,7 @@
 """导入全部模型，确保 SQLModel.metadata 完整（建表 / 初始化脚本依赖）。"""
 
 from app.models.after_sale import AfterSale, AfterSaleLog
+from app.models.finance import Bill, BillDetail, ReconcileDiff
 from app.models.fulfillment import LogisticsCompany, LogisticsTrace, Shipment
 from app.models.inventory import Inventory, InventoryAlert, InventoryFlow, InventoryShare
 from app.models.order import Order, OrderChange, OrderExt, OrderItem, OrderLog
@@ -40,6 +41,9 @@ __all__ = [
     "LogisticsTrace",
     "AfterSale",
     "AfterSaleLog",
+    "Bill",
+    "BillDetail",
+    "ReconcileDiff",
     "OperationLog",
     "Permission",
     "Role",

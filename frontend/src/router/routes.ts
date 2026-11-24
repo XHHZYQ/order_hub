@@ -14,6 +14,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   { key: 'order', title: '订单中心', icon: 'Tickets' },
   { key: 'shipment', title: '发货履约', icon: 'Van' },
   { key: 'product', title: '商品与库存', icon: 'Goods' },
+  { key: 'finance', title: '财务对账', icon: 'Money' },
   { key: 'platform', title: '平台与店铺', icon: 'Shop' },
   { key: 'system', title: '系统管理', icon: 'Setting' },
 ]
@@ -34,7 +35,37 @@ export const layoutChildren: RouteRecordRaw[] = [
     path: '/dashboard/overview',
     name: 'DashboardOverview',
     component: () => import('@/views/dashboard/overview.vue'),
-    meta: { title: '经营总览', icon: 'Odometer', group: 'dashboard' },
+    meta: { title: '经营总览', icon: 'Odometer', group: 'dashboard', perm: 'dashboard:overview' },
+  },
+  {
+    path: '/dashboard/channel',
+    name: 'DashboardChannel',
+    component: () => import('@/views/dashboard/channel.vue'),
+    meta: { title: '渠道与店铺', icon: 'Share', group: 'dashboard', perm: 'dashboard:channel' },
+  },
+  {
+    path: '/dashboard/product',
+    name: 'DashboardProduct',
+    component: () => import('@/views/dashboard/product.vue'),
+    meta: { title: '商品销售', icon: 'Goods', group: 'dashboard', perm: 'dashboard:product' },
+  },
+  {
+    path: '/dashboard/fulfillment',
+    name: 'DashboardFulfillment',
+    component: () => import('@/views/dashboard/fulfillment.vue'),
+    meta: { title: '订单与履约', icon: 'Van', group: 'dashboard', perm: 'dashboard:fulfillment' },
+  },
+  {
+    path: '/dashboard/after-sale',
+    name: 'DashboardAfterSale',
+    component: () => import('@/views/dashboard/after-sale.vue'),
+    meta: { title: '售后分析', icon: 'RefreshLeft', group: 'dashboard', perm: 'dashboard:after_sale' },
+  },
+  {
+    path: '/dashboard/inventory',
+    name: 'DashboardInventory',
+    component: () => import('@/views/dashboard/inventory.vue'),
+    meta: { title: '库存分析', icon: 'Box', group: 'dashboard', perm: 'dashboard:inventory' },
   },
   // 订单中心（M2）
   {
@@ -135,6 +166,31 @@ export const layoutChildren: RouteRecordRaw[] = [
     name: 'InventoryStocktake',
     component: () => import('@/views/inventory/stocktake.vue'),
     meta: { title: '库存盘点', icon: 'Memo', group: 'product', perm: 'inventory:stocktake' },
+  },
+  // 财务对账（M8）
+  {
+    path: '/finance/bill',
+    name: 'FinanceBill',
+    component: () => import('@/views/finance/bill.vue'),
+    meta: { title: '账单管理', icon: 'Tickets', group: 'finance', perm: 'finance:bill' },
+  },
+  {
+    path: '/finance/difference',
+    name: 'FinanceDifference',
+    component: () => import('@/views/finance/difference.vue'),
+    meta: { title: '对账差异', icon: 'Warning', group: 'finance', perm: 'finance:difference' },
+  },
+  {
+    path: '/finance/settlement',
+    name: 'FinanceSettlement',
+    component: () => import('@/views/finance/settlement.vue'),
+    meta: { title: '结算汇总', icon: 'Money', group: 'finance', perm: 'finance:settlement' },
+  },
+  {
+    path: '/finance/profit',
+    name: 'FinanceProfit',
+    component: () => import('@/views/finance/profit.vue'),
+    meta: { title: '毛利核算', icon: 'TrendCharts', group: 'finance', perm: 'finance:profit' },
   },
   // 平台与店铺（M1）
   {

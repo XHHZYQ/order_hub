@@ -8,7 +8,8 @@ role_shop / sync_task / sync_log / operation_log /
 product / sku / platform_product / platform_sku / sku_mapping /
 inventory / inventory_flow / inventory_share / inventory_alert /
 orders / order_item / order_ext / order_log / order_change /
-logistics_company / shipment / logistics_trace / after_sale / after_sale_log
+logistics_company / shipment / logistics_trace / after_sale / after_sale_log /
+bill / bill_detail / reconcile_diff
 """
 
 import pathlib
@@ -26,6 +27,7 @@ from app.core.constants import ORDER_STATUS_MAP  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models.after_sale import AfterSale, AfterSaleLog  # noqa: E402
+from app.models.finance import Bill, BillDetail, ReconcileDiff  # noqa: E402
 from app.models.fulfillment import LogisticsCompany, LogisticsTrace, Shipment  # noqa: E402
 from app.models.order import (  # noqa: E402
     Order,
@@ -58,7 +60,8 @@ from app.models.system import (  # noqa: E402
     UserRole,
 )
 from app.simulator import seed  # noqa: E402
-from app.utils.datetime_util import now_utc  # noqa: E402
+from app.services import bill_service  # noqa: E402
+from app.utils.datetime_util import now_utc, to_local  # noqa: E402
 
 random.seed(20260101)
 
@@ -245,6 +248,9 @@ def with_menus(page_codes: list[str]) -> set[str]:
 
 def clear_tables(session: Session) -> None:
     for model in (
+        ReconcileDiff,
+        BillDetail,
+        Bill,
         AfterSaleLog,
         AfterSale,
         LogisticsTrace,
@@ -1123,6 +1129,7 @@ def seed_inventory_shares(session: Session, skus: list[Sku], shops: dict[str, Sh
 # --------------------------------------------------------------------------- #
 SHIP_SEED = 20260303
 AS_SEED = 20260404
+FINANCE_SEED = 20260505
 
 # 售后单状态（与 after_sale_service 口径一致）
 AS_STATUS_POOL = ["PENDING", "PROCESSING", "WAIT_BUYER", "FINISHED", "CLOSED"]
@@ -1379,6 +1386,66 @@ def seed_merge_groups(session: Session, shops: dict, orders: list[Order]) -> int
     return groups
 
 
+def seed_finance(session: Session, shops: dict, orders: list[Order]) -> tuple[int, int, int]:
+    """生成账单批次与对账差异（FR-08-01~03）。
+
+    每店铺取最近 3 个账期，覆盖三种对账状态：
+    - 最新账期：仅导入（PENDING，待对账）；
+    - 中间账期：导入 → 对账（RECONCILED，部分差异已处理）；
+    - 最老账期：导入 → 对账 → 封账（CLOSED）。
+    模拟账单会注入「本地无单 / 账单无单 / 金额不一致」三类差异。
+    """
+    periods: dict[int, set[str]] = {}
+    for order in orders:
+        local = to_local(order.order_time)
+        if local is None:
+            continue
+        periods.setdefault(order.shop_id, set()).add(local.strftime("%Y-%m"))
+
+    rng = random.Random(FINANCE_SEED)
+    shop_map = {shop.id: shop for shop in shops.values()}
+    bill_count = detail_count = diff_count = 0
+
+    for shop_id, period_set in periods.items():
+        shop = shop_map.get(shop_id)
+        if not shop:
+            continue
+        recent = sorted(period_set, reverse=True)[:3]
+        for idx, period in enumerate(recent):
+            bill = bill_service.import_bill(
+                session,
+                platform_code=shop.platform_code,
+                shop_id=shop_id,
+                bill_period=period,
+                auto_generate=True,
+            )
+            bill_count += 1
+            detail_count += bill["total_count"]
+            if idx == 0:
+                continue  # 最新账期保持待对账
+            result = bill_service.match_bill(session, bill["id"])
+            diff_count += result["diff_count"]
+            # 处理部分差异，保留少量待处理便于演示
+            pending = session.exec(
+                select(ReconcileDiff).where(
+                    ReconcileDiff.bill_id == bill["id"],
+                    ReconcileDiff.handle_status == "PENDING",
+                )
+            ).all()
+            for diff in pending:
+                if rng.random() < 0.6:
+                    diff.handle_status = "HANDLED"
+                    diff.operator = "fin01"
+                    diff.handle_time = now_utc()
+                    diff.handle_remark = "人工核对无误，确认处理"
+                    session.add(diff)
+            session.flush()
+            if idx == len(recent) - 1:
+                bill_service.close_bill(session, bill["id"])
+    session.flush()
+    return bill_count, detail_count, diff_count
+
+
 def main() -> None:
     with Session(engine) as session:
         print("[seed] 清空本批次相关表 ...")
@@ -1406,6 +1473,7 @@ def main() -> None:
         company_count = seed_logistics_companies(session)
         ship_count, trace_count = seed_shipments(session, orders)
         as_count, as_log_count = seed_after_sales(session, orders)
+        bill_count, detail_count, diff_count = seed_finance(session, shops, orders)
 
         session.commit()
 
@@ -1418,6 +1486,7 @@ def main() -> None:
         print(f"[seed] 库存 {len(inv_rows)} / 预警 {alert_count} / 流水 {flow_count} / 共享 {share_count}")
         print(f"[seed] 物流公司 {company_count} / 发货单 {ship_count} / 轨迹 {trace_count}")
         print(f"[seed] 售后单 {as_count} / 售后日志 {as_log_count}")
+        print(f"[seed] 账单批次 {bill_count} / 账单明细 {detail_count} / 对账差异 {diff_count}")
         print("[seed] 同步日志与操作日志已生成")
         print("[seed] 默认密码：123456")
 

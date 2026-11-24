@@ -253,3 +253,48 @@ REFUND_STATUS: dict[str, str] = {
 
 # 售后处理动作（after_sale_log.action，FR-07-02）
 AFTER_SALE_ACTIONS = ["同意", "拒绝", "协商", "退款", "备注", "同步", "退货入库"]
+
+# --------------------------------------------------------------------------- #
+# M8 财务对账
+# --------------------------------------------------------------------------- #
+# 账单对账状态（bill.reconcile_status）
+BILL_RECONCILE_STATUS: dict[str, str] = {
+    "PENDING": "待对账",
+    "MATCHING": "对账中",
+    "RECONCILED": "已对账",
+    "CLOSED": "已封账",
+}
+
+# 账单明细匹配状态（bill_detail.match_status）
+BILL_MATCH_STATUS: dict[str, str] = {
+    "MATCHED": "已匹配",
+    "AMOUNT_DIFF": "金额不一致",
+    "UNMATCHED": "未匹配",
+}
+
+# 差异类型（reconcile_diff.diff_type）
+RECONCILE_DIFF_TYPE: dict[str, str] = {
+    "LOCAL_MISSING": "本地无单",
+    "BILL_MISSING": "账单无单",
+    "AMOUNT_DIFF": "金额不一致",
+}
+
+# 差异处理状态（reconcile_diff.handle_status）
+DIFF_HANDLE_STATUS: dict[str, str] = {
+    "PENDING": "待处理",
+    "HANDLED": "已处理",
+}
+
+# 账单导入支持的文件扩展名
+BILL_FILE_EXT = [".csv", ".xlsx"]
+
+# --------------------------------------------------------------------------- #
+# M9 数据看板
+# --------------------------------------------------------------------------- #
+# 下钻指标类型（/dashboard/drill-down）
+DRILL_METRICS: dict[str, str] = {
+    "order": "订单",
+    "product": "商品",
+    "after_sale": "售后单",
+    "inventory_alert": "库存预警",
+}

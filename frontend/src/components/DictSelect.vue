@@ -45,6 +45,10 @@ import {
   AFTER_SALE_TYPE_DICT,
   AFTER_SALE_STATUS_DICT,
   REFUND_STATUS_DICT,
+  BILL_RECONCILE_STATUS_DICT,
+  BILL_MATCH_STATUS_DICT,
+  RECONCILE_DIFF_TYPE_DICT,
+  DIFF_HANDLE_STATUS_DICT,
 } from '@/store/dict'
 import type { Option } from '@/types'
 
@@ -70,6 +74,10 @@ type DictType =
   | 'afterSaleType'
   | 'afterSaleStatus'
   | 'refundStatus'
+  | 'billReconcile'
+  | 'billMatch'
+  | 'diffType'
+  | 'diffHandle'
 
 interface Props {
   modelValue?: string | number | (string | number)[] | null
@@ -144,6 +152,14 @@ const options = computed<Option[]>(() => {
       return AFTER_SALE_STATUS_DICT
     case 'refundStatus':
       return REFUND_STATUS_DICT
+    case 'billReconcile':
+      return BILL_RECONCILE_STATUS_DICT
+    case 'billMatch':
+      return BILL_MATCH_STATUS_DICT
+    case 'diffType':
+      return RECONCILE_DIFF_TYPE_DICT
+    case 'diffHandle':
+      return DIFF_HANDLE_STATUS_DICT
     default:
       return []
   }

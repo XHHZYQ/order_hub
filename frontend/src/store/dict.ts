@@ -147,6 +147,34 @@ export const REFUND_STATUS_DICT: Option[] = [
   { label: '退款失败', value: 'FAILED' },
 ]
 
+// 账单对账状态（M8 bill.reconcile_status）
+export const BILL_RECONCILE_STATUS_DICT: Option[] = [
+  { label: '待对账', value: 'PENDING' },
+  { label: '对账中', value: 'MATCHING' },
+  { label: '已对账', value: 'RECONCILED' },
+  { label: '已封账', value: 'CLOSED' },
+]
+
+// 账单明细匹配状态（bill_detail.match_status）
+export const BILL_MATCH_STATUS_DICT: Option[] = [
+  { label: '已匹配', value: 'MATCHED' },
+  { label: '金额不一致', value: 'AMOUNT_DIFF' },
+  { label: '未匹配', value: 'UNMATCHED' },
+]
+
+// 对账差异类型（reconcile_diff.diff_type）
+export const RECONCILE_DIFF_TYPE_DICT: Option[] = [
+  { label: '本地无单', value: 'LOCAL_MISSING' },
+  { label: '账单无单', value: 'BILL_MISSING' },
+  { label: '金额不一致', value: 'AMOUNT_DIFF' },
+]
+
+// 差异处理状态（reconcile_diff.handle_status）
+export const DIFF_HANDLE_STATUS_DICT: Option[] = [
+  { label: '待处理', value: 'PENDING' },
+  { label: '已处理', value: 'HANDLED' },
+]
+
 /** 按字典取中文标签（找不到返回原值，空值返回 '-'） */
 export function dictLabel(dict: Option[], value: unknown): string {
   if (value === undefined || value === null || value === '') return '-'

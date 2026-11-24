@@ -17,8 +17,8 @@ interface StatusOption {
 
 interface Props {
   value: string | number | null | undefined
-  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 / match 匹配状态 / inventoryLevel 库存水平 / shipment 发货单状态 / trace 轨迹节点 / push 回写状态 / afterSale 售后状态 / afterSaleType 售后类型 / refund 退款状态 / abnormal 异常类型 / custom */
-  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'match' | 'inventoryLevel' | 'shipment' | 'trace' | 'push' | 'afterSale' | 'afterSaleType' | 'refund' | 'abnormal' | 'custom'
+  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 / match 匹配状态 / inventoryLevel 库存水平 / shipment 发货单状态 / trace 轨迹节点 / push 回写状态 / afterSale 售后状态 / afterSaleType 售后类型 / refund 退款状态 / abnormal 异常类型 / billReconcile 账单对账状态 / billMatch 账单明细匹配 / diffType 对账差异类型 / diffHandle 差异处理状态 / custom */
+  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'match' | 'inventoryLevel' | 'shipment' | 'trace' | 'push' | 'afterSale' | 'afterSaleType' | 'refund' | 'abnormal' | 'billReconcile' | 'billMatch' | 'diffType' | 'diffHandle' | 'custom'
   /** 自定义映射（scene=custom 时使用） */
   options?: Record<string | number, StatusOption>
   effect?: 'light' | 'dark' | 'plain'
@@ -128,6 +128,30 @@ const SCENE_MAP: Record<string, Record<string | number, StatusOption>> = {
     ADDRESS: { label: '地址异常', type: 'warning' },
     AMOUNT: { label: '金额异常', type: 'warning' },
     TIMEOUT: { label: '长时间未付/未发', type: 'info' },
+  },
+  // 账单对账状态（M8）
+  billReconcile: {
+    PENDING: { label: '待对账', type: 'warning' },
+    MATCHING: { label: '对账中', type: 'primary' },
+    RECONCILED: { label: '已对账', type: 'success' },
+    CLOSED: { label: '已封账', type: 'info' },
+  },
+  // 账单明细匹配状态
+  billMatch: {
+    MATCHED: { label: '已匹配', type: 'success' },
+    AMOUNT_DIFF: { label: '金额不一致', type: 'warning' },
+    UNMATCHED: { label: '未匹配', type: 'danger' },
+  },
+  // 对账差异类型
+  diffType: {
+    LOCAL_MISSING: { label: '本地无单', type: 'danger' },
+    BILL_MISSING: { label: '账单无单', type: 'warning' },
+    AMOUNT_DIFF: { label: '金额不一致', type: 'warning' },
+  },
+  // 差异处理状态
+  diffHandle: {
+    PENDING: { label: '待处理', type: 'warning' },
+    HANDLED: { label: '已处理', type: 'success' },
   },
 }
 

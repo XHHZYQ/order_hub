@@ -5,6 +5,8 @@ from fastapi import APIRouter
 from app.api.v1 import (
     after_sales,
     auth,
+    bills,
+    dashboard,
     inventory,
     operation_logs,
     orders,
@@ -36,3 +38,6 @@ api_router.include_router(sku_mappings.router)
 api_router.include_router(inventory.router)
 api_router.include_router(shipments.router)
 api_router.include_router(after_sales.router)
+api_router.include_router(bills.router)
+api_router.include_router(bills.reconcile_router)
+api_router.include_router(dashboard.router)
