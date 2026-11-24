@@ -52,7 +52,15 @@ def register_task(task_id: int, cron_expr: str | None) -> None:
     trigger = parse_cron(cron_expr)
     if trigger is None:
         return
-    scheduler.add_job(run_sync_task, trigger=trigger, args=[task_id], id=job_id, replace_existing=True)
+    scheduler.add_job(
+        run_sync_task,
+        trigger=trigger,
+        args=[task_id],
+        id=job_id,
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
 
 def reload_tasks() -> None:

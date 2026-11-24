@@ -7,8 +7,21 @@ from app.core.deps import get_allowed_shop_ids, get_db, require_permission
 from app.core.exceptions import forbidden
 from app.core.response import success, success_page
 from app.models.system import User
-from app.schemas.order import OrderErrorHandleRequest, OrderSyncRequest
-from app.services import order_service, sync_service
+from app.schemas.order import (
+    OrderAddressRequest,
+    OrderAuditRequest,
+    OrderBatchAuditRequest,
+    OrderBatchIdsRequest,
+    OrderBatchRemarkRequest,
+    OrderErrorHandleRequest,
+    OrderMergeRequest,
+    OrderPriceRequest,
+    OrderRemarkRequest,
+    OrderSplitRequest,
+    OrderStatusChangeRequest,
+    OrderSyncRequest,
+)
+from app.services import after_sale_service, order_service, sync_service
 
 router = APIRouter(prefix="/orders", tags=["订单"])
 
@@ -146,6 +159,158 @@ def handle_sync_error(
 ):
     _assert_shop_allowed(session, order_id, allowed_shop_ids)
     return success(order_service.handle_sync_error(session, order_id, payload.note, operator))
+
+
+# ---------------- M3 订单处理（静态路径须在 /{order_id} 之前） ---------------- #
+@router.get("/abnormal", summary="异常订单池")
+def list_abnormal_orders(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    shop_id: int | None = None,
+    platform_code: str | None = None,
+    abnormal_type: str | None = None,
+    keyword: str | None = None,
+    _: User = Depends(require_permission("order:abnormal")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    items, total = order_service.list_abnormal_orders(
+        session,
+        page=page,
+        page_size=page_size,
+        shop_id=shop_id,
+        platform_code=platform_code,
+        abnormal_type=abnormal_type,
+        keyword=keyword,
+        allowed_shop_ids=allowed_shop_ids,
+    )
+    return success_page(items, total, page, page_size)
+
+
+@router.post("/batch/audit", summary="批量审核")
+def batch_audit(
+    payload: OrderBatchAuditRequest,
+    operator: User = Depends(require_permission("order:audit")),
+    session: Session = Depends(get_db),
+):
+    return success(order_service.batch_audit(session, payload, operator))
+
+
+@router.post("/batch/remark", summary="批量备注/打标")
+def batch_remark(
+    payload: OrderBatchRemarkRequest,
+    operator: User = Depends(require_permission("order:list")),
+    session: Session = Depends(get_db),
+):
+    return success(order_service.batch_remark(session, payload, operator))
+
+
+@router.post("/batch/forward", summary="批量转发货")
+def batch_forward(
+    payload: OrderBatchIdsRequest,
+    operator: User = Depends(require_permission("order:audit")),
+    session: Session = Depends(get_db),
+):
+    return success(order_service.batch_forward_ship(session, payload, operator))
+
+
+@router.post("/merge", summary="订单合并")
+def merge_orders(
+    payload: OrderMergeRequest,
+    operator: User = Depends(require_permission("order:list")),
+    session: Session = Depends(get_db),
+):
+    return success(order_service.merge_orders(session, payload, operator))
+
+
+@router.post("/{order_id}/audit", summary="订单审核")
+def audit_order(
+    order_id: int,
+    payload: OrderAuditRequest,
+    operator: User = Depends(require_permission("order:audit")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.audit_order(session, order_id, payload, operator))
+
+
+@router.post("/{order_id}/price", summary="订单改价")
+def change_price(
+    order_id: int,
+    payload: OrderPriceRequest,
+    operator: User = Depends(require_permission("order:price")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.change_price(session, order_id, payload, operator))
+
+
+@router.post("/{order_id}/address", summary="修改收货地址")
+def change_address(
+    order_id: int,
+    payload: OrderAddressRequest,
+    operator: User = Depends(require_permission("order:address")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.change_address(session, order_id, payload, operator))
+
+
+@router.post("/{order_id}/remark", summary="订单备注/打标")
+def add_remark(
+    order_id: int,
+    payload: OrderRemarkRequest,
+    operator: User = Depends(require_permission("order:list")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.add_remark(session, order_id, payload, operator))
+
+
+@router.post("/{order_id}/split", summary="订单拆分")
+def split_order(
+    order_id: int,
+    payload: OrderSplitRequest,
+    operator: User = Depends(require_permission("order:list")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.split_order(session, order_id, payload, operator))
+
+
+@router.patch("/{order_id}/status", summary="订单状态流转")
+def change_status(
+    order_id: int,
+    payload: OrderStatusChangeRequest,
+    operator: User = Depends(require_permission("order:list")),
+    allowed_shop_ids: list[int] | None = Depends(get_allowed_shop_ids),
+    session: Session = Depends(get_db),
+):
+    _assert_shop_allowed(session, order_id, allowed_shop_ids)
+    return success(order_service.change_status(session, order_id, payload, operator))
+
+
+@router.get("/{order_id}/status-options", summary="可流转状态选项")
+def status_options(
+    order_id: int,
+    _: User = Depends(require_permission("order:detail")),
+    session: Session = Depends(get_db),
+):
+    return success(order_service.status_options(session, order_id))
+
+
+@router.get("/{order_id}/after-sales", summary="订单关联售后单")
+def order_after_sales(
+    order_id: int,
+    _: User = Depends(require_permission("order:detail")),
+    session: Session = Depends(get_db),
+):
+    return success(after_sale_service.list_by_order(session, order_id))
 
 
 @router.get("/{order_id}", summary="订单详情")

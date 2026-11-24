@@ -30,7 +30,7 @@ class Status:
 PLATFORM_CODES = ["TAOBAO", "JD", "PDD", "DOUYIN", "SELF"]
 
 # 同步类型
-SYNC_TYPES = ["ORDER", "INVENTORY", "AFTER_SALE"]
+SYNC_TYPES = ["ORDER", "INVENTORY", "AFTER_SALE", "TRACE"]
 
 # 同步日志状态
 SYNC_STATUS = {
@@ -155,4 +155,101 @@ LOG_MODULES = {
     "PRODUCT": "商品管理",
     "MAPPING": "SKU映射",
     "INVENTORY": "库存管理",
+    "SHIPMENT": "发货履约",
+    "AFTER_SALE": "售后管理",
 }
+
+# --------------------------------------------------------------------------- #
+# M3 订单处理
+# --------------------------------------------------------------------------- #
+# 订单可打标标签（FR-03-04）
+ORDER_TAG_OPTIONS = ["急单", "需核验", "大客户", "预售", "补发", "高价值"]
+
+# 审核动作 → 目标状态（FR-03-01）
+AUDIT_ACTIONS = {"PASS": "审核通过", "REJECT": "审核驳回"}
+
+# 订单变更类型（order_change.change_type）
+ORDER_CHANGE_TYPE = {
+    "AUDIT": "审核",
+    "PRICE": "改价",
+    "ADDRESS": "改址",
+    "REMARK": "备注",
+    "TAG": "打标",
+    "STATUS": "状态",
+    "MERGE": "合并",
+    "SPLIT": "拆分",
+    "SHIP": "发货",
+}
+
+# 状态机：合法流转（key 当前状态 → 允许流转到的状态集合，见《数据库设计》7.2）
+ORDER_STATUS_FLOW: dict[str, set[str]] = {
+    "PENDING_PAY": {"PENDING_AUDIT", "CLOSED"},
+    "PENDING_AUDIT": {"PENDING_SHIP", "CLOSED"},
+    "PENDING_SHIP": {"PART_SHIPPED", "SHIPPED", "AFTER_SALE", "CLOSED"},
+    "PART_SHIPPED": {"SHIPPED", "AFTER_SALE"},
+    "SHIPPED": {"FINISHED", "AFTER_SALE"},
+    "AFTER_SALE": {"SHIPPED", "FINISHED", "CLOSED"},
+    "FINISHED": set(),
+    "CLOSED": set(),
+}
+
+# --------------------------------------------------------------------------- #
+# M6 发货与物流
+# --------------------------------------------------------------------------- #
+# 发货单物流状态（shipment.status）
+SHIPMENT_STATUS: dict[str, str] = {
+    "SHIPPED": "已发货",
+    "IN_TRANSIT": "运输中",
+    "SIGNED": "已签收",
+    "ABNORMAL": "异常",
+}
+
+# 发货单回写平台状态（shipment.push_status）
+PUSH_STATUS: dict[int, str] = {0: "待回写", 1: "成功", 2: "失败"}
+
+# 打印状态
+PRINT_STATUS: dict[int, str] = {0: "未打印", 1: "已打印"}
+
+# 物流轨迹节点状态（logistics_trace.trace_status）
+TRACE_STATUS: dict[str, str] = {
+    "COLLECTED": "已揽收",
+    "IN_TRANSIT": "运输中",
+    "ARRIVED": "到达网点",
+    "DELIVERING": "派送中",
+    "SIGNED": "已签收",
+    "ABNORMAL": "异常",
+}
+
+# 物流异常预警原因（FR-06-06）
+LOGISTICS_ALERT_REASON = "物流长时间无更新（超 48 小时未揽收/未更新轨迹）"
+
+# --------------------------------------------------------------------------- #
+# M7 售后管理
+# --------------------------------------------------------------------------- #
+# 售后类型（after_sale.type）
+AFTER_SALE_TYPE: dict[str, str] = {
+    "REFUND": "退款",
+    "RETURN_REFUND": "退货退款",
+    "EXCHANGE": "换货",
+}
+
+# 统一售后状态（after_sale.status）
+AFTER_SALE_STATUS: dict[str, str] = {
+    "PENDING": "待处理",
+    "PROCESSING": "处理中",
+    "WAIT_BUYER": "等待买家",
+    "WAIT_SELLER": "等待商家",
+    "FINISHED": "已完成",
+    "CLOSED": "已关闭",
+}
+
+# 退款状态（after_sale.refund_status）
+REFUND_STATUS: dict[str, str] = {
+    "NONE": "无需退款",
+    "PENDING": "退款中",
+    "SUCCESS": "退款成功",
+    "FAILED": "退款失败",
+}
+
+# 售后处理动作（after_sale_log.action，FR-07-02）
+AFTER_SALE_ACTIONS = ["同意", "拒绝", "协商", "退款", "备注", "同步", "退货入库"]

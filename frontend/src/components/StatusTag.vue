@@ -17,8 +17,8 @@ interface StatusOption {
 
 interface Props {
   value: string | number | null | undefined
-  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 / match 匹配状态 / inventoryLevel 库存水平 / custom */
-  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'match' | 'inventoryLevel' | 'custom'
+  /** 场景：common 通用启停 / auth 授权 / syncStatus 同步状态 / trigger 触发方式 / syncType 同步类型 / order 订单状态 / match 匹配状态 / inventoryLevel 库存水平 / shipment 发货单状态 / trace 轨迹节点 / push 回写状态 / afterSale 售后状态 / afterSaleType 售后类型 / refund 退款状态 / abnormal 异常类型 / custom */
+  scene?: 'common' | 'auth' | 'syncStatus' | 'trigger' | 'syncType' | 'order' | 'match' | 'inventoryLevel' | 'shipment' | 'trace' | 'push' | 'afterSale' | 'afterSaleType' | 'refund' | 'abnormal' | 'custom'
   /** 自定义映射（scene=custom 时使用） */
   options?: Record<string | number, StatusOption>
   effect?: 'light' | 'dark' | 'plain'
@@ -77,6 +77,57 @@ const SCENE_MAP: Record<string, Record<string | number, StatusOption>> = {
     NORMAL: { label: '正常', type: 'success' },
     LOW: { label: '低于安全库存', type: 'warning' },
     OUT: { label: '缺货', type: 'danger' },
+  },
+  // 发货单物流状态
+  shipment: {
+    SHIPPED: { label: '已发货', type: 'primary' },
+    IN_TRANSIT: { label: '运输中', type: 'primary' },
+    SIGNED: { label: '已签收', type: 'success' },
+    ABNORMAL: { label: '异常', type: 'danger' },
+  },
+  // 物流轨迹节点
+  trace: {
+    COLLECTED: { label: '已揽收', type: 'info' },
+    IN_TRANSIT: { label: '运输中', type: 'primary' },
+    ARRIVED: { label: '到达网点', type: 'primary' },
+    DELIVERING: { label: '派送中', type: 'warning' },
+    SIGNED: { label: '已签收', type: 'success' },
+    ABNORMAL: { label: '异常', type: 'danger' },
+  },
+  // 回写平台状态
+  push: {
+    0: { label: '待回写', type: 'info' },
+    1: { label: '成功', type: 'success' },
+    2: { label: '失败', type: 'danger' },
+  },
+  // 售后状态
+  afterSale: {
+    PENDING: { label: '待处理', type: 'warning' },
+    PROCESSING: { label: '处理中', type: 'primary' },
+    WAIT_BUYER: { label: '等待买家', type: 'info' },
+    WAIT_SELLER: { label: '等待商家', type: 'warning' },
+    FINISHED: { label: '已完成', type: 'success' },
+    CLOSED: { label: '已关闭', type: 'info' },
+  },
+  // 售后类型
+  afterSaleType: {
+    REFUND: { label: '退款', type: 'warning' },
+    RETURN_REFUND: { label: '退货退款', type: 'danger' },
+    EXCHANGE: { label: '换货', type: 'primary' },
+  },
+  // 退款状态
+  refund: {
+    NONE: { label: '无需退款', type: 'info' },
+    PENDING: { label: '退款中', type: 'warning' },
+    SUCCESS: { label: '退款成功', type: 'success' },
+    FAILED: { label: '退款失败', type: 'danger' },
+  },
+  // 异常订单类型
+  abnormal: {
+    SYNC: { label: '同步异常', type: 'danger' },
+    ADDRESS: { label: '地址异常', type: 'warning' },
+    AMOUNT: { label: '金额异常', type: 'warning' },
+    TIMEOUT: { label: '长时间未付/未发', type: 'info' },
   },
 }
 

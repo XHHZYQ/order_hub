@@ -7,7 +7,8 @@
 role_shop / sync_task / sync_log / operation_log /
 product / sku / platform_product / platform_sku / sku_mapping /
 inventory / inventory_flow / inventory_share / inventory_alert /
-orders / order_item / order_ext / order_log / order_change
+orders / order_item / order_ext / order_log / order_change /
+logistics_company / shipment / logistics_trace / after_sale / after_sale_log
 """
 
 import pathlib
@@ -18,11 +19,14 @@ from decimal import Decimal
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from sqlmodel import Session, delete  # noqa: E402
+from sqlmodel import Session, delete, select  # noqa: E402
 
+from app.adapters import logistics  # noqa: E402
 from app.core.constants import ORDER_STATUS_MAP  # noqa: E402
 from app.core.database import engine  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
+from app.models.after_sale import AfterSale, AfterSaleLog  # noqa: E402
+from app.models.fulfillment import LogisticsCompany, LogisticsTrace, Shipment  # noqa: E402
 from app.models.order import (  # noqa: E402
     Order,
     OrderChange,
@@ -241,6 +245,11 @@ def with_menus(page_codes: list[str]) -> set[str]:
 
 def clear_tables(session: Session) -> None:
     for model in (
+        AfterSaleLog,
+        AfterSale,
+        LogisticsTrace,
+        Shipment,
+        LogisticsCompany,
         InventoryFlow,
         InventoryAlert,
         InventoryShare,
@@ -488,6 +497,9 @@ def seed_sync_tasks(session: Session, shops: dict[str, Shop]) -> list[SyncTask]:
         ("DY001", "INVENTORY", "0 */6 * * *", 1, "库存同步"),
         ("SELF001", "AFTER_SALE", "0 */2 * * *", 1, "售后每 2 小时同步"),
         ("SELF002", "INVENTORY", "0 3 * * *", 0, "库存每日同步（暂停）"),
+        ("TB001", "TRACE", "*/30 * * * *", 1, "物流轨迹每 30 分钟拉取"),
+        ("SELF001", "TRACE", "0 */1 * * *", 1, "物流轨迹每小时拉取"),
+        ("DY001", "TRACE", "0 */2 * * *", 0, "物流轨迹每 2 小时拉取（暂停）"),
     ]
     tasks: list[SyncTask] = []
     for idx, (scode, stype, cron, status, remark) in enumerate(plan):
@@ -593,7 +605,7 @@ def _money(value: float) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"))
 
 
-def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> int:
+def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> list[Order]:
     """生成贴近真实的订单数据（约 300~500 单，覆盖全部平台与店铺，跨度约 60 天）。
 
     明细的 platform_sku_id 采用确定性编码，可与 sku_mapping 命中；未命中者 is_matched=0。
@@ -603,7 +615,7 @@ def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> int:
     now = now_utc()
     used_pnos: set[str] = set()
     seq = 0
-    total = 0
+    orders: list[Order] = []
 
     for shop in shops.values():
         platform_code = shop.platform_code
@@ -720,6 +732,7 @@ def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> int:
             )
             session.add(order)
             session.flush()
+            orders.append(order)
 
             for item in items:
                 matched = mapping_lookup.get((shop.id, item["platform_sku_id"]))
@@ -828,10 +841,8 @@ def seed_orders(session: Session, shops: dict, mapping_lookup: dict) -> int:
                     )
                 )
 
-            total += 1
-
     session.flush()
-    return total
+    return orders
 
 
 # --------------------------------------------------------------------------- #
@@ -1107,6 +1118,267 @@ def seed_inventory_shares(session: Session, skus: list[Sku], shops: dict[str, Sh
     return count
 
 
+# --------------------------------------------------------------------------- #
+# 履约与售后域（M6 / M7）
+# --------------------------------------------------------------------------- #
+SHIP_SEED = 20260303
+AS_SEED = 20260404
+
+# 售后单状态（与 after_sale_service 口径一致）
+AS_STATUS_POOL = ["PENDING", "PROCESSING", "WAIT_BUYER", "FINISHED", "CLOSED"]
+AS_STATUS_WEIGHTS = [26, 24, 12, 28, 10]
+AS_REASON_POOL = [
+    "七天无理由退货", "不想要了", "尺码不合适", "商品破损/有瑕疵",
+    "发错货/漏发", "质量问题", "与描述不符", "物流太慢",
+]
+AS_PLATFORM_STATUS = {
+    "PENDING": "买家申请售后，待商家处理",
+    "PROCESSING": "商家处理中",
+    "WAIT_BUYER": "等待买家确认",
+    "FINISHED": "售后已完成",
+    "CLOSED": "售后已关闭",
+}
+
+
+def _order_items(session: Session, order_id: int) -> list[OrderItem]:
+    return session.exec(select(OrderItem).where(OrderItem.order_id == order_id)).all()
+
+
+def _shipment_status_from_traces(traces: list[dict]) -> str:
+    """按轨迹推进发货单物流状态（口径同 shipment_service._refresh_shipment_status）。"""
+    statuses = {t["trace_status"] for t in traces}
+    if "ABNORMAL" in statuses:
+        return "ABNORMAL"
+    if "SIGNED" in statuses:
+        return "SIGNED"
+    if statuses & {"ARRIVED", "DELIVERING"}:
+        return "IN_TRANSIT"
+    return "SHIPPED"
+
+
+def seed_logistics_companies(session: Session) -> int:
+    """物流公司字典（与适配层内置字典一致）。"""
+    for idx, (code, name, _prefix) in enumerate(logistics.LOGISTICS_COMPANIES):
+        session.add(LogisticsCompany(company_code=code, company_name=name, sort_no=idx + 1, status=1))
+    session.flush()
+    return len(logistics.LOGISTICS_COMPANIES)
+
+
+def seed_shipments(session: Session, orders: list[Order]) -> tuple[int, int]:
+    """为已发货/已完成/售后中的订单生成发货单与物流轨迹，返回 (发货单数, 轨迹数)。"""
+    rng = random.Random(SHIP_SEED)
+    seq = 0
+    ship_count = 0
+    trace_count = 0
+    operators = ["admin", "ops01", "wh01", "wh02"]
+
+    for order in orders:
+        if not order.shipped_at:
+            continue
+        items = _order_items(session, order.id)
+        total_qty = sum((it.quantity or 0) for it in items) or 1
+
+        # 部分发货订单偶发两个包裹，演示一单多包
+        if order.status == "PART_SHIPPED" and rng.random() < 0.5:
+            parts = [max(total_qty // 2, 1), max(total_qty - total_qty // 2, 1)]
+        else:
+            parts = [total_qty]
+
+        if order.status == "FINISHED":
+            node_count = 5
+        elif order.status == "AFTER_SALE":
+            node_count = rng.choice([5, 5, 4, 3])
+        elif order.status == "SHIPPED":
+            node_count = rng.choice([1, 2, 3])
+        else:
+            node_count = rng.choice([1, 2])
+        abnormal = node_count <= 3 and rng.random() < 0.06
+
+        for part_no, qty in enumerate(parts):
+            seq += 1
+            ship_time = order.shipped_at + timedelta(hours=part_no * rng.randint(2, 12))
+            company_code, company_name = logistics.pick_company(rng)
+            waybill_no = logistics.gen_waybill_no(company_code, rng)
+            traces = logistics.gen_traces(
+                waybill_no=waybill_no,
+                company_code=company_code,
+                dest_city=order.receiver_city,
+                shipped_at=ship_time,
+                node_count=node_count,
+                abnormal=abnormal,
+            )
+            push_roll = rng.random()
+            if push_roll < 0.06:
+                push_status, push_fail_reason = 2, "平台接口超时，待重试"
+            elif push_roll < 0.10:
+                push_status, push_fail_reason = 0, None
+            else:
+                push_status, push_fail_reason = 1, None
+
+            shipment = Shipment(
+                shipment_no=f"SH{ship_time:%Y%m%d}{seq:05d}",
+                order_id=order.id,
+                order_no=order.order_no,
+                shop_id=order.shop_id,
+                platform_code=order.platform_code,
+                logistics_company_code=company_code,
+                logistics_company_name=company_name,
+                waybill_no=waybill_no,
+                face_sheet_no=logistics.gen_face_sheet_no(rng),
+                package_no=logistics.gen_package_no(rng, order.order_no),
+                ship_qty=qty,
+                print_status=1 if rng.random() < 0.92 else 0,
+                push_status=push_status,
+                push_fail_reason=push_fail_reason,
+                status=_shipment_status_from_traces(traces),
+                shipped_at=ship_time,
+                operator=rng.choice(operators),
+                created_at=ship_time,
+            )
+            session.add(shipment)
+            session.flush()
+            ship_count += 1
+            for node in traces:
+                session.add(
+                    LogisticsTrace(
+                        shipment_id=shipment.id,
+                        waybill_no=waybill_no,
+                        trace_time=node["trace_time"],
+                        trace_desc=node["trace_desc"],
+                        trace_status=node["trace_status"],
+                        created_at=node["trace_time"],
+                    )
+                )
+                trace_count += 1
+    session.flush()
+    return ship_count, trace_count
+
+
+def seed_after_sales(session: Session, orders: list[Order]) -> tuple[int, int]:
+    """为已发货/已完成/售后中的订单汇聚售后单（售后中订单保证至少一单在处理）。"""
+    rng = random.Random(AS_SEED)
+    seq = 0
+    as_count = 0
+    log_count = 0
+    operators = ["cs01", "cs02", "admin"]
+
+    for order in orders:
+        if order.status not in ("SHIPPED", "FINISHED", "AFTER_SALE"):
+            continue
+        force = order.status == "AFTER_SALE"
+        if not force and rng.random() > 0.28:
+            continue
+
+        seq += 1
+        as_type = rng.choices(["REFUND", "RETURN_REFUND", "EXCHANGE"], weights=[35, 55, 10], k=1)[0]
+        if force:
+            status = rng.choice(["PENDING", "PROCESSING", "WAIT_BUYER"])
+        else:
+            status = rng.choices(AS_STATUS_POOL, weights=AS_STATUS_WEIGHTS, k=1)[0]
+
+        apply_time = order.order_time + timedelta(hours=rng.randint(24, 200))
+        refund = Decimal("0")
+        refund_status = "NONE"
+        finish_time = None
+        goods_returned = 0
+        if as_type in ("REFUND", "RETURN_REFUND"):
+            refund = (order.pay_amount or Decimal("0")).quantize(Decimal("0.01"))
+            if status == "FINISHED":
+                refund_status = "SUCCESS"
+                finish_time = apply_time + timedelta(hours=rng.randint(6, 60))
+                goods_returned = 1 if as_type == "RETURN_REFUND" else 0
+            elif status in ("PENDING", "PROCESSING", "WAIT_BUYER"):
+                refund_status = "PENDING"
+        elif as_type == "EXCHANGE" and status == "FINISHED":
+            finish_time = apply_time + timedelta(hours=rng.randint(12, 72))
+
+        operator = rng.choice(operators)
+        after_sale = AfterSale(
+            after_sale_no=f"AS{apply_time:%Y%m%d}{seq:05d}",
+            platform_code=order.platform_code,
+            shop_id=order.shop_id,
+            platform_after_sale_no=f"PAS{order.platform_order_no}"[:64],
+            order_id=order.id,
+            order_no=order.order_no,
+            buyer_account=order.buyer_account,
+            type=as_type,
+            reason=rng.choice(AS_REASON_POOL),
+            status=status,
+            platform_status=AS_PLATFORM_STATUS.get(status),
+            refund_amount=refund,
+            refund_status=refund_status,
+            goods_returned=goods_returned,
+            apply_time=apply_time,
+            handle_deadline=apply_time + timedelta(hours=72),
+            finish_time=finish_time,
+            operator=operator,
+            created_at=apply_time,
+            updated_at=finish_time or apply_time,
+        )
+        session.add(after_sale)
+        session.flush()
+        as_count += 1
+
+        def _log(action: str, content: str, when: datetime, op: str) -> None:
+            nonlocal log_count
+            session.add(
+                AfterSaleLog(
+                    after_sale_id=after_sale.id,
+                    after_sale_no=after_sale.after_sale_no,
+                    action=action,
+                    content=content,
+                    operator=op,
+                    created_at=when,
+                )
+            )
+            log_count += 1
+
+        _log("同步", f"从平台同步售后申请：{AS_PLATFORM_STATUS.get(status)}", apply_time, "系统")
+        if status in ("PROCESSING", "WAIT_BUYER"):
+            _log("同意", "商家同意售后申请", apply_time + timedelta(hours=rng.randint(1, 24)), operator)
+        elif status == "FINISHED":
+            _log("同意", "商家同意售后申请", apply_time + timedelta(hours=rng.randint(1, 24)), operator)
+            if as_type == "RETURN_REFUND":
+                _log("退货入库", f"退货已入库，回补库存；退款金额 {refund}", finish_time or apply_time, operator)
+            else:
+                _log("退款", f"退款金额 {refund}，退款成功", finish_time or apply_time, operator)
+        elif status == "CLOSED":
+            _log("拒绝", "不符合售后条件，已拒绝", apply_time + timedelta(hours=rng.randint(1, 24)), operator)
+    session.flush()
+    return as_count, log_count
+
+
+def seed_merge_groups(session: Session, shops: dict, orders: list[Order]) -> int:
+    """构造少量「同一买家多单」场景，便于演示订单合并（FR-03-05）。"""
+    groups = 0
+    profiles = [
+        ("buyer_merge01", "张伟", "13900000001", "广东省", "深圳市", "南山区", "科技园南路 1 号"),
+        ("buyer_merge02", "李娜", "13900000002", "浙江省", "杭州市", "西湖区", "文三路 88 号"),
+        ("buyer_merge03", "王强", "13900000003", "江苏省", "南京市", "鼓楼区", "中山北路 66 号"),
+    ]
+    for idx, shop in enumerate(list(shops.values())[:3]):
+        cands = [
+            o for o in orders
+            if o.shop_id == shop.id and o.status in ("PENDING_AUDIT", "PENDING_SHIP")
+        ][:3]
+        if len(cands) < 2:
+            continue
+        buyer, name, phone, prov, city, district, addr = profiles[idx % len(profiles)]
+        for o in cands:
+            o.buyer_account = buyer
+            o.buyer_nick = buyer
+            o.receiver_name = name
+            o.receiver_phone = phone
+            o.receiver_province = prov
+            o.receiver_city = city
+            o.receiver_district = district
+            o.receiver_address = addr
+            session.add(o)
+        groups += 1
+    session.flush()
+    return groups
+
+
 def main() -> None:
     with Session(engine) as session:
         print("[seed] 清空本批次相关表 ...")
@@ -1125,20 +1397,27 @@ def main() -> None:
         products, sku_by_code, skus = seed_products(session)
         platform_skus = seed_platform_products(session, shops)
         mapping_lookup = seed_sku_mappings(session, platform_skus, sku_by_code)
-        orders_count = seed_orders(session, shops, mapping_lookup)
+        orders = seed_orders(session, shops, mapping_lookup)
+        merge_groups = seed_merge_groups(session, shops, orders)
         inv_rows = seed_inventory(session, skus)
         alert_count = seed_inventory_alerts(session, inv_rows)
         flow_count = seed_inventory_flows(session, inv_rows)
         share_count = seed_inventory_shares(session, skus, shops)
+        company_count = seed_logistics_companies(session)
+        ship_count, trace_count = seed_shipments(session, orders)
+        as_count, as_log_count = seed_after_sales(session, orders)
 
         session.commit()
 
         print(f"[seed] 平台 {len(platforms)} / 店铺 {len(shops)} / 角色 {len(roles)} / 权限 {len(all_codes)}")
-        print(f"[seed] 用户 {len(users)} / 同步任务 {len(tasks)} / 订单 {orders_count}")
+        print(f"[seed] 用户 {len(users)} / 同步任务 {len(tasks)} / 权限码 {len(all_codes)}")
+        print(f"[seed] 订单 {len(orders)}（含可合并场景 {merge_groups} 组）")
         print(
             f"[seed] 商品 {len(products)} / SKU {len(skus)} / 平台规格 {len(platform_skus)} / 映射 {len(mapping_lookup)}"
         )
         print(f"[seed] 库存 {len(inv_rows)} / 预警 {alert_count} / 流水 {flow_count} / 共享 {share_count}")
+        print(f"[seed] 物流公司 {company_count} / 发货单 {ship_count} / 轨迹 {trace_count}")
+        print(f"[seed] 售后单 {as_count} / 售后日志 {as_log_count}")
         print("[seed] 同步日志与操作日志已生成")
         print("[seed] 默认密码：123456")
 

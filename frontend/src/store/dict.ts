@@ -9,6 +9,7 @@ export const SYNC_TYPE_DICT: Option[] = [
   { label: '订单', value: 'ORDER' },
   { label: '库存', value: 'INVENTORY' },
   { label: '售后', value: 'AFTER_SALE' },
+  { label: '轨迹', value: 'TRACE' },
 ]
 
 export const SYNC_STATUS_DICT: Option[] = [
@@ -86,6 +87,64 @@ export const INVENTORY_LEVEL_DICT: Option[] = [
 export const MATCH_STATUS_DICT: Option[] = [
   { label: '已匹配', value: 1 },
   { label: '未匹配', value: 0 },
+]
+
+// 异常订单池类型（M3，FR-03-07；与后端 ABNORMAL_TYPES 一致）
+export const ABNORMAL_TYPE_DICT: Option[] = [
+  { label: '同步异常', value: 'SYNC' },
+  { label: '地址异常', value: 'ADDRESS' },
+  { label: '金额异常', value: 'AMOUNT' },
+  { label: '长时间未付/未发', value: 'TIMEOUT' },
+]
+
+// 发货单物流状态（M6 shipment.status）
+export const SHIPMENT_STATUS_DICT: Option[] = [
+  { label: '已发货', value: 'SHIPPED' },
+  { label: '运输中', value: 'IN_TRANSIT' },
+  { label: '已签收', value: 'SIGNED' },
+  { label: '异常', value: 'ABNORMAL' },
+]
+
+// 发货单回写平台状态（shipment.push_status）
+export const PUSH_STATUS_DICT: Option[] = [
+  { label: '待回写', value: 0 },
+  { label: '成功', value: 1 },
+  { label: '失败', value: 2 },
+]
+
+// 物流轨迹节点状态（logistics_trace.trace_status）
+export const TRACE_STATUS_DICT: Option[] = [
+  { label: '已揽收', value: 'COLLECTED' },
+  { label: '运输中', value: 'IN_TRANSIT' },
+  { label: '到达网点', value: 'ARRIVED' },
+  { label: '派送中', value: 'DELIVERING' },
+  { label: '已签收', value: 'SIGNED' },
+  { label: '异常', value: 'ABNORMAL' },
+]
+
+// 售后类型（M7 after_sale.type）
+export const AFTER_SALE_TYPE_DICT: Option[] = [
+  { label: '退款', value: 'REFUND' },
+  { label: '退货退款', value: 'RETURN_REFUND' },
+  { label: '换货', value: 'EXCHANGE' },
+]
+
+// 售后状态（after_sale.status）
+export const AFTER_SALE_STATUS_DICT: Option[] = [
+  { label: '待处理', value: 'PENDING' },
+  { label: '处理中', value: 'PROCESSING' },
+  { label: '等待买家', value: 'WAIT_BUYER' },
+  { label: '等待商家', value: 'WAIT_SELLER' },
+  { label: '已完成', value: 'FINISHED' },
+  { label: '已关闭', value: 'CLOSED' },
+]
+
+// 退款状态（after_sale.refund_status）
+export const REFUND_STATUS_DICT: Option[] = [
+  { label: '无需退款', value: 'NONE' },
+  { label: '退款中', value: 'PENDING' },
+  { label: '退款成功', value: 'SUCCESS' },
+  { label: '退款失败', value: 'FAILED' },
 ]
 
 /** 按字典取中文标签（找不到返回原值，空值返回 '-'） */

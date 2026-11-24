@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    after_sales,
     auth,
     inventory,
     operation_logs,
@@ -10,6 +11,7 @@ from app.api.v1 import (
     platforms,
     products,
     roles,
+    shipments,
     shops,
     sku_mappings,
     sync,
@@ -32,3 +34,5 @@ api_router.include_router(products.sku_router)
 api_router.include_router(products.platform_product_router)
 api_router.include_router(sku_mappings.router)
 api_router.include_router(inventory.router)
+api_router.include_router(shipments.router)
+api_router.include_router(after_sales.router)

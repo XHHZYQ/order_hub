@@ -12,6 +12,7 @@ export interface MenuGroup {
 export const MENU_GROUPS: MenuGroup[] = [
   { key: 'dashboard', title: '数据看板', icon: 'DataLine' },
   { key: 'order', title: '订单中心', icon: 'Tickets' },
+  { key: 'shipment', title: '发货履约', icon: 'Van' },
   { key: 'product', title: '商品与库存', icon: 'Goods' },
   { key: 'platform', title: '平台与店铺', icon: 'Shop' },
   { key: 'system', title: '系统管理', icon: 'Setting' },
@@ -47,6 +48,44 @@ export const layoutChildren: RouteRecordRaw[] = [
     name: 'OrderDetail',
     component: () => import('@/views/order/detail.vue'),
     meta: { title: '订单详情', icon: 'Document', group: 'order', perm: 'order:detail', hidden: true },
+  },
+  // 订单处理与售后（M3 + M7）
+  {
+    path: '/order/abnormal',
+    name: 'OrderAbnormal',
+    component: () => import('@/views/order/abnormal.vue'),
+    meta: { title: '异常订单池', icon: 'Warning', group: 'order', perm: 'order:abnormal' },
+  },
+  {
+    path: '/after-sale/list',
+    name: 'AfterSaleList',
+    component: () => import('@/views/after-sale/list.vue'),
+    meta: { title: '售后管理', icon: 'RefreshLeft', group: 'order', perm: 'order:after_sale' },
+  },
+  // 发货履约（M6）
+  {
+    path: '/shipment/pending',
+    name: 'ShipmentPending',
+    component: () => import('@/views/shipment/pending.vue'),
+    meta: { title: '待发货', icon: 'Box', group: 'shipment', perm: 'shipment:pending' },
+  },
+  {
+    path: '/shipment/ship',
+    name: 'ShipmentShip',
+    component: () => import('@/views/shipment/ship.vue'),
+    meta: { title: '打单发货', icon: 'Printer', group: 'shipment', perm: 'shipment:ship' },
+  },
+  {
+    path: '/shipment/list',
+    name: 'ShipmentList',
+    component: () => import('@/views/shipment/list.vue'),
+    meta: { title: '发货记录', icon: 'List', group: 'shipment', perm: 'shipment:list' },
+  },
+  {
+    path: '/shipment/alert',
+    name: 'ShipmentAlert',
+    component: () => import('@/views/shipment/alert.vue'),
+    meta: { title: '物流异常', icon: 'Van', group: 'shipment', perm: 'shipment:alert' },
   },
   // 商品与库存（M4 商品与 SKU 映射 + M5 库存同步与防超卖）
   {

@@ -38,6 +38,10 @@ EXTRA_DDL: list[str] = [
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_sku_id ON inventory (sku_id)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_share ON inventory_share (sku_id, shop_id)',
     'CREATE UNIQUE INDEX IF NOT EXISTS uk_inventory_alert_sku_id ON inventory_alert (sku_id)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_logistics_company_code ON logistics_company (company_code)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_shipment_shipment_no ON shipment (shipment_no)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_after_sale_no ON after_sale (after_sale_no)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS uk_after_sale_platform_no ON after_sale (platform_code, shop_id, platform_after_sale_no)',
     # 5.2 常用索引
     'CREATE INDEX IF NOT EXISTS idx_sync_log_task_created ON sync_log (task_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_operation_log_created ON operation_log (created_at)',
@@ -55,6 +59,13 @@ EXTRA_DDL: list[str] = [
     'CREATE INDEX IF NOT EXISTS idx_sku_mapping_sku_id ON sku_mapping (sku_id)',
     'CREATE INDEX IF NOT EXISTS idx_inventory_flow_sku_created ON inventory_flow (sku_id, created_at)',
     'CREATE INDEX IF NOT EXISTS idx_inventory_share_shop_id ON inventory_share (shop_id)',
+    'CREATE INDEX IF NOT EXISTS idx_shipment_order_id ON shipment (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_shipment_status_shipped_at ON shipment (status, shipped_at)',
+    'CREATE INDEX IF NOT EXISTS idx_logistics_trace_shipment_id ON logistics_trace (shipment_id)',
+    'CREATE INDEX IF NOT EXISTS idx_logistics_trace_waybill_no ON logistics_trace (waybill_no)',
+    'CREATE INDEX IF NOT EXISTS idx_after_sale_shop_status_time ON after_sale (shop_id, status, apply_time)',
+    'CREATE INDEX IF NOT EXISTS idx_after_sale_order_id ON after_sale (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_after_sale_log_after_sale_id ON after_sale_log (after_sale_id)',
 ]
 
 

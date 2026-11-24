@@ -38,6 +38,13 @@ import {
   INVENTORY_STATUS_DICT,
   INVENTORY_LEVEL_DICT,
   MATCH_STATUS_DICT,
+  ABNORMAL_TYPE_DICT,
+  SHIPMENT_STATUS_DICT,
+  PUSH_STATUS_DICT,
+  TRACE_STATUS_DICT,
+  AFTER_SALE_TYPE_DICT,
+  AFTER_SALE_STATUS_DICT,
+  REFUND_STATUS_DICT,
 } from '@/store/dict'
 import type { Option } from '@/types'
 
@@ -56,6 +63,13 @@ type DictType =
   | 'inventoryStatus'
   | 'inventoryLevel'
   | 'matchStatus'
+  | 'abnormalType'
+  | 'shipmentStatus'
+  | 'pushStatus'
+  | 'traceStatus'
+  | 'afterSaleType'
+  | 'afterSaleStatus'
+  | 'refundStatus'
 
 interface Props {
   modelValue?: string | number | (string | number)[] | null
@@ -116,6 +130,20 @@ const options = computed<Option[]>(() => {
       return INVENTORY_LEVEL_DICT
     case 'matchStatus':
       return MATCH_STATUS_DICT
+    case 'abnormalType':
+      return ABNORMAL_TYPE_DICT
+    case 'shipmentStatus':
+      return SHIPMENT_STATUS_DICT
+    case 'pushStatus':
+      return PUSH_STATUS_DICT
+    case 'traceStatus':
+      return TRACE_STATUS_DICT
+    case 'afterSaleType':
+      return AFTER_SALE_TYPE_DICT
+    case 'afterSaleStatus':
+      return AFTER_SALE_STATUS_DICT
+    case 'refundStatus':
+      return REFUND_STATUS_DICT
     default:
       return []
   }

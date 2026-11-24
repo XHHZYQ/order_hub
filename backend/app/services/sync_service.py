@@ -4,6 +4,7 @@ import random
 import string
 import time
 from datetime import timedelta
+from types import SimpleNamespace
 
 from sqlmodel import Session, func, select
 
@@ -343,8 +344,8 @@ def set_sync_task_status(session: Session, task_id: int, status: int, operator: 
 def execute_task(session: Session, task: SyncTask, trigger_type: str = "手动") -> SyncLog:
     """执行一次同步任务，写入一条同步日志。
 
-    ORDER 类型走真实汇聚（order_service.run_order_sync）；INVENTORY / AFTER_SALE
-    暂保持占位（成功、计数 0），将在后续批次实现，不报错。
+    ORDER 走订单汇聚（order_service.run_order_sync）；AFTER_SALE 走售后汇聚；
+    TRACE 拉取在途发货单轨迹；INVENTORY 暂保持占位（成功、计数 0），不报错。
     """
     if task.status != 1:
         raise status_not_allowed("同步任务已停用，无法执行")
@@ -371,6 +372,29 @@ def execute_task(session: Session, task: SyncTask, trigger_type: str = "手动")
             status = "失败"
         if fail_count:
             fail_reason = f"{fail_count} 条订单同步异常（可重试或人工处理）"
+    elif task.sync_type == "AFTER_SALE":
+        shop = session.get(Shop, task.shop_id)
+        if shop and shop.is_deleted == 0:
+            from app.services import after_sale_service
+
+            result = after_sale_service.sync_after_sales(
+                session, SimpleNamespace(shop_id=task.shop_id), operator=None
+            )
+            success_count = int(result.get("created", 0))
+            status = "成功"
+        else:
+            status = "失败"
+            fail_reason = "店铺不存在或已删除"
+    elif task.sync_type == "TRACE":
+        shop = session.get(Shop, task.shop_id)
+        if shop and shop.is_deleted == 0:
+            from app.services import shipment_service
+
+            success_count = shipment_service.sync_traces_by_shop(session, shop_id=task.shop_id)
+            status = "成功"
+        else:
+            status = "失败"
+            fail_reason = "店铺不存在或已删除"
     else:
         fail_reason = "该类型将在后续批次实现"
 

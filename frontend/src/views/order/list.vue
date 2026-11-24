@@ -52,16 +52,37 @@
           手动补单
         </el-button>
         <el-button v-permission="'order:sync'" :icon="Warning" @click="openErrors">同步异常</el-button>
+        <el-button
+          v-permission="'order:audit'"
+          :icon="Select"
+          :disabled="!selectedIds.length"
+          @click="openBatchAudit"
+        >
+          批量审核（{{ selectedIds.length }}）
+        </el-button>
+        <el-button :icon="PriceTag" :disabled="!selectedIds.length" @click="openBatchRemark">
+          批量打标（{{ selectedIds.length }}）
+        </el-button>
+        <el-button
+          :icon="Van"
+          :disabled="!selectedIds.length"
+          @click="openBatchForward"
+        >
+          批量转发货（{{ selectedIds.length }}）
+        </el-button>
       </template>
 
       <el-table
         v-loading="loading"
         class="clickable-table"
         :data="list"
+        row-key="id"
         stripe
         border
         @row-click="handleRowClick"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="46" reserve-selection />
         <el-table-column prop="order_no" label="订单号" min-width="180" show-overflow-tooltip />
         <el-table-column prop="platform_name" label="平台" min-width="110" />
         <el-table-column prop="shop_name" label="店铺" min-width="150" show-overflow-tooltip />
@@ -178,6 +199,99 @@
         <el-button type="primary" :loading="handling" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 批量审核 -->
+    <el-dialog v-model="batchAuditVisible" title="批量审核" width="480px" destroy-on-close>
+      <el-alert
+        class="mb-16"
+        type="info"
+        :closable="false"
+        :title="`将对已选中的 ${selectedIds.length} 笔订单执行审核`"
+        show-icon
+      />
+      <el-form label-width="90px">
+        <el-form-item label="审核结果">
+          <el-radio-group v-model="batchAuditForm.action">
+            <el-radio value="PASS">审核通过</el-radio>
+            <el-radio value="REJECT">审核驳回</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="原因">
+          <el-input
+            v-model="batchAuditForm.reason"
+            type="textarea"
+            :rows="3"
+            :placeholder="batchAuditForm.action === 'REJECT' ? '请填写驳回原因' : '选填'"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchAuditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitBatchAudit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量打标 -->
+    <el-dialog v-model="batchRemarkVisible" title="批量打标 / 备注" width="480px" destroy-on-close>
+      <el-alert
+        class="mb-16"
+        type="info"
+        :closable="false"
+        :title="`将对已选中的 ${selectedIds.length} 笔订单设置标签与备注`"
+        show-icon
+      />
+      <el-form label-width="90px">
+        <el-form-item label="标签">
+          <el-select
+            v-model="batchRemarkForm.tags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="输入后回车新增标签"
+            style="width: 100%"
+          >
+            <el-option v-for="t in TAG_OPTIONS" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="商家备注">
+          <el-input
+            v-model="batchRemarkForm.merchant_remark"
+            type="textarea"
+            :rows="3"
+            placeholder="选填"
+          />
+        </el-form-item>
+        <el-form-item label="追加备注">
+          <el-switch v-model="batchRemarkForm.append" />
+          <span class="text-secondary ml-8">开启后在原备注后追加，否则覆盖</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchRemarkVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitBatchRemark">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量转发货 -->
+    <el-dialog v-model="batchForwardVisible" title="批量转发货" width="460px" destroy-on-close>
+      <el-alert
+        class="mb-16"
+        type="warning"
+        :closable="false"
+        :title="`将把已选中的 ${selectedIds.length} 笔订单转入待发货流程`"
+        show-icon
+      />
+      <el-form label-width="90px">
+        <el-form-item label="备注">
+          <el-input v-model="batchForwardForm.remark" type="textarea" :rows="3" placeholder="选填" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchForwardVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitBatchForward">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -186,7 +300,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, DocumentAdd, Warning } from '@element-plus/icons-vue'
+import { Refresh, DocumentAdd, Warning, Select, PriceTag, Van } from '@element-plus/icons-vue'
 import PageTable from '@/components/PageTable.vue'
 import QueryForm from '@/components/QueryForm.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -199,9 +313,19 @@ import {
   orderSupplement,
   retrySyncError,
   handleSyncError,
+  batchAuditOrders,
+  batchOrderRemark,
+  batchForwardShip,
 } from '@/api/order'
 import { formatDateTime } from '@/utils/datetime'
-import type { Order, OrderSyncForm, SyncError } from '@/types/order'
+import type {
+  Order,
+  OrderSyncForm,
+  SyncError,
+  OrderBatchAuditForm,
+  OrderBatchRemarkForm,
+  OrderBatchIdsForm,
+} from '@/types/order'
 
 const router = useRouter()
 const loading = ref(false)
@@ -262,8 +386,110 @@ function handlePageChange(payload: { page: number; pageSize: number }) {
   fetchList()
 }
 
-function handleRowClick(row: Order) {
+function handleRowClick(row: Order, column: { type?: string }) {
+  // 勾选列不触发跳转
+  if (column?.type === 'selection') return
   router.push(`/order/detail/${row.id}`)
+}
+
+// ---------- 批量操作（审核 / 打标 / 转发货） ----------
+const submitting = ref(false)
+const selectedIds = ref<number[]>([])
+const TAG_OPTIONS = ['加急', '赠品', '先款后货', '易碎', '大件', '待确认', '重要客户']
+
+function handleSelectionChange(rows: Order[]) {
+  selectedIds.value = rows.map((r) => r.id)
+}
+
+function afterBatch(res: { success_count: number; fail_count: number }, tip: string) {
+  ElMessage.success(`${tip}：成功 ${res.success_count} 笔，失败 ${res.fail_count} 笔`)
+  fetchList()
+}
+
+// 批量审核
+const batchAuditVisible = ref(false)
+const batchAuditForm = reactive({ action: 'PASS' as 'PASS' | 'REJECT', reason: '' })
+
+function openBatchAudit() {
+  batchAuditForm.action = 'PASS'
+  batchAuditForm.reason = ''
+  batchAuditVisible.value = true
+}
+
+async function submitBatchAudit() {
+  if (batchAuditForm.action === 'REJECT' && !batchAuditForm.reason.trim()) {
+    ElMessage.warning('请填写驳回原因')
+    return
+  }
+  const payload: OrderBatchAuditForm = {
+    order_ids: selectedIds.value,
+    action: batchAuditForm.action,
+    reason: batchAuditForm.reason.trim() || null,
+  }
+  submitting.value = true
+  try {
+    const res = await batchAuditOrders(payload)
+    batchAuditVisible.value = false
+    afterBatch(res, '审核完成')
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 批量打标 / 备注
+const batchRemarkVisible = ref(false)
+const batchRemarkForm = reactive({
+  tags: [] as string[],
+  merchant_remark: '',
+  append: false,
+})
+
+function openBatchRemark() {
+  batchRemarkForm.tags = []
+  batchRemarkForm.merchant_remark = ''
+  batchRemarkForm.append = false
+  batchRemarkVisible.value = true
+}
+
+async function submitBatchRemark() {
+  const payload: OrderBatchRemarkForm = {
+    order_ids: selectedIds.value,
+    tags: batchRemarkForm.tags.length ? batchRemarkForm.tags : null,
+    merchant_remark: batchRemarkForm.merchant_remark.trim() || null,
+    append: batchRemarkForm.append,
+  }
+  submitting.value = true
+  try {
+    const res = await batchOrderRemark(payload)
+    batchRemarkVisible.value = false
+    afterBatch(res, '打标完成')
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 批量转发货
+const batchForwardVisible = ref(false)
+const batchForwardForm = reactive({ remark: '' })
+
+function openBatchForward() {
+  batchForwardForm.remark = ''
+  batchForwardVisible.value = true
+}
+
+async function submitBatchForward() {
+  const payload: OrderBatchIdsForm = {
+    order_ids: selectedIds.value,
+    remark: batchForwardForm.remark.trim() || null,
+  }
+  submitting.value = true
+  try {
+    const res = await batchForwardShip(payload)
+    batchForwardVisible.value = false
+    afterBatch(res, '转发货完成')
+  } finally {
+    submitting.value = false
+  }
 }
 
 // ---------- 手动同步 / 手动补单 ----------
@@ -380,6 +606,10 @@ onMounted(fetchList)
 <style scoped lang="scss">
 .mb-16 {
   margin-bottom: 16px;
+}
+
+.ml-8 {
+  margin-left: 8px;
 }
 
 .pager {
